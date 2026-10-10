@@ -98,7 +98,8 @@ void WindowFrame::on_auth_state_changed() {
         // On first login (no PIN configured): show mandatory PIN setup.
         // On subsequent launches (PIN exists): show PIN unlock.
         // Skip if user is already on the lock screen (index 3).
-        if (stack_->currentIndex() != 3) {
+        // LOCAL_MODE: skip PIN gate entirely.
+        if (stack_->currentIndex() != 3 && !qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE")) {
             if (auth.needs_pin_setup()) {
                 LOG_INFO("WindowFrame", "Authenticated but no PIN — showing PIN setup");
                 lock_screen_->show_setup();
@@ -118,6 +119,9 @@ void WindowFrame::on_auth_state_changed() {
                 return;
             }
         }
+        // LOCAL_MODE: mark PIN gate as cleared so dashboard stays visible
+        if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE"))
+            pin_gate_cleared_ = true;
 
         if (auth.session().has_paid_plan()) {
             // Defensive: at this point the PIN gate above must have either

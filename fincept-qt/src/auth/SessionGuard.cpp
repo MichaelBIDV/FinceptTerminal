@@ -41,6 +41,9 @@ void SessionGuard::stop() {
 }
 
 void SessionGuard::check_pulse() {
+    // LOCAL MODE: no server to pulse — skip entirely
+    if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE"))
+        return;
     const auto& s = AuthManager::instance().session();
     if (!s.authenticated || s.api_key.isEmpty())
         return;

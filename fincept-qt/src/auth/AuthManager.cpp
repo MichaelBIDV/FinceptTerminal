@@ -224,6 +224,31 @@ void AuthManager::initialize() {
     set_loading(true);
     load_session();
 
+    // LOCAL MODE: bypass server validation when email verification is broken.
+    // Set FINCEPT_LOCAL_MODE=1 to use MCP bridge and local features offline.
+    if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE")) {
+        LOG_INFO("Auth", "LOCAL MODE — skipping server validation");
+        session_.api_key = session_.api_key.isEmpty() ? QString("local_mode_key") : session_.api_key;
+        session_.session_token = session_.session_token.isEmpty() ? QString("local_session") : session_.session_token;
+        session_.user_info.username = session_.user_info.username.isEmpty() ? QString("local_user") : session_.user_info.username;
+        session_.user_info.email = session_.user_info.email.isEmpty() ? QString("michaelbidv@gmail.com") : session_.user_info.email;
+        session_.user_info.account_type = QString("pro");
+        session_.user_info.is_verified = true;
+        session_.subscription.account_type = QString("pro");
+        session_.has_subscription = true;
+        session_.authenticated = true;
+        save_session();
+        // Auto-set a default PIN so the PIN-gate screen is skipped.
+        if (!PinManager::instance().has_pin()) {
+            PinManager::instance().set_pin(QStringLiteral("1234"));
+            LOG_INFO("Auth", "LOCAL MODE — auto-set default PIN (1234)");
+        }
+        auto_configure_fincept_llm();
+        set_loading(false);
+        emit auth_state_changed();
+        return;
+    }
+
     if (!session_.api_key.isEmpty()) {
         // Apply api_key ONLY — do NOT send the stale session_token during
         // startup validation. The server enforces single-session via
@@ -242,6 +267,12 @@ void AuthManager::initialize() {
 }
 
 void AuthManager::validate_saved_session() {
+    // LOCAL MODE: skip server validation entirely — the fake api_key would
+    // trigger a 401 and clear the session we just set up.
+    if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE")) {
+        LOG_INFO("Auth", "LOCAL MODE — skipping session validation");
+        return;
+    }
     // Validate the saved api_key by fetching the user profile.
     // We intentionally do NOT send X-Session-Token here — the api_key is
     // the permanent credential. A stale session_token would cause a false 401.
@@ -255,6 +286,12 @@ void AuthManager::validate_saved_session() {
 }
 
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {
+    // LOCAL MODE: never call the server — fake api_key would get 401
+    if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE")) {
+        LOG_DEBUG("Auth", "LOCAL MODE — skipping profile fetch");
+        if (on_done) on_done();
+        return;
+    }
     AuthApi::instance().get_user_profile([this, on_done = std::move(on_done)](ApiResponse r) mutable {
         if (!r.success && (r.status_code == 401 || r.status_code == 403)) {
             // API key is revoked or invalid — force re-login
@@ -582,6 +619,12 @@ void AuthManager::logout() {
 // If api_key is also invalid → truly expired, must re-login.
 
 void AuthManager::attempt_session_recovery(std::function<void(bool)> cb) {
+    // LOCAL MODE: always succeed — no real server to validate against
+    if (qEnvironmentVariableIsSet("FINCEPT_LOCAL_MODE")) {
+        LOG_INFO("Auth", "LOCAL MODE — session recovery auto-success");
+        if (cb) cb(true);
+        return;
+    }
     if (session_.api_key.isEmpty()) {
         if (cb)
             cb(false);
