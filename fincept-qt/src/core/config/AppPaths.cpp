@@ -3,6 +3,7 @@
 #include "core/config/ProfileManager.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
 
@@ -56,6 +57,10 @@ QString AppPaths::crashdumps() {
     return ProfileManager::instance().profile_root() + "/crashdumps";
 }
 
+QString AppPaths::inbox() {
+    return ProfileManager::instance().profile_root() + "/inbox";
+}
+
 void AppPaths::ensure_all() {
     // Use fprintf to stderr (not qWarning) — main.cpp installs a Qt message
     // handler that routes qWarning into Logger, but Logger's file isn't open
@@ -80,6 +85,20 @@ void AppPaths::ensure_all() {
     try_mkpath(runtime());
     try_mkpath(workspaces());
     try_mkpath(crashdumps());
+
+    // Inbox: any process running as this user may drop files here, so keep it
+    // owner-only (the data/ tree is 0755). Re-applied on every start in case the
+    // directory was created by the helper with a looser umask.
+    const QFileDevice::Permissions owner_only = QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                                QFileDevice::ExeOwner | QFileDevice::ReadUser |
+                                                QFileDevice::WriteUser | QFileDevice::ExeUser;
+    const QString inbox_root = inbox();
+    for (const char* sub : {"", "/tmp", "/new", "/cur", "/done", "/bad"}) {
+        const QString p = inbox_root + QLatin1String(sub);
+        try_mkpath(p);
+        if (!QFile::setPermissions(p, owner_only))
+            fprintf(stderr, "[AppPaths] chmod 0700 failed: %s\n", qUtf8Printable(p));
+    }
 }
 
 } // namespace fincept

@@ -1,16 +1,19 @@
 #pragma once
 // NewsCategoryWidget — category-filtered news headlines. Subscribes to
-// `news:category:<category>` (QVector<NewsArticle>) and renders the most
+// news:category:<category> (QVector<NewsArticle>) and renders the most
 // recent N entries.
 //
 // Config (persisted):
 //   { "category": "<category-id>", "max_rows": <int> }
 
 #include "screens/dashboard/widgets/BaseWidget.h"
+#include "services/news/NewsService.h"
 
 #include <QString>
+#include <QVector>
 
 class QListWidget;
+class QListWidgetItem;
 class QLabel;
 
 namespace fincept::screens::widgets {
@@ -33,6 +36,7 @@ class NewsCategoryWidget : public BaseWidget {
   private:
     void apply_styles();
     void on_articles(const QVariant& v);
+    void on_item_clicked(QListWidgetItem* item);
     void hub_resubscribe();
     void hub_unsubscribe_all();
 
@@ -40,6 +44,7 @@ class NewsCategoryWidget : public BaseWidget {
     int max_rows_ = 12;
     QListWidget* list_ = nullptr;
     QLabel* badge_ = nullptr;
+    QVector<fincept::services::NewsArticle> current_articles_;
     bool hub_active_ = false;
 };
 

@@ -2,10 +2,12 @@
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/news/dialogs/NewsDetailDialog.h"
 #include "ui/theme/Theme.h"
 
 #include <QDateTime>
 #include <QLabel>
+#include <QMouseEvent>
 
 namespace fincept::screens::widgets {
 
@@ -71,11 +73,7 @@ void NewsWidget::hub_subscribe() {
         populate(v.value<QVector<services::NewsArticle>>());
     });
     hub_active_ = true;
-    // Cold-start cache fallback: if the hub already has a cached value
-    // (from a producer warm-up before this widget was mounted), surface it
-    // immediately. The subscribe path above also delivers it, but only if
-    // the value is still fresh; peek_raw() guarantees we render even on a
-    // stale-but-present cache so the panel never sits blank.
+
     QVariant cached = hub.peek_raw(QString::fromLatin1(kTopic));
     if (cached.canConvert<QVector<services::NewsArticle>>()) {
         set_loading(false);
@@ -115,15 +113,20 @@ void NewsWidget::populate(const QVector<services::NewsArticle>& articles) {
         if (article.headline.isEmpty())
             continue;
 
-        // Time column: prefer NewsArticle.time, fall back to derived HH:MM
-        // from sort_ts (unix seconds) if `time` is missing.
         QString time_str = article.time.left(5);
         if (time_str.isEmpty() && article.sort_ts > 0) {
             time_str = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString(QStringLiteral("HH:mm"));
         }
 
         auto* row = new QWidget(this);
-        row->setStyleSheet(QString("border-bottom: 1px solid %1;").arg(ui::colors::BORDER_DIM()));
+        row->setObjectName("newsRow");
+        row->setProperty("article_idx", rendered);
+        row->setCursor(Qt::PointingHandCursor);
+        row->installEventFilter(this);
+        row->setStyleSheet(QString("QWidget#newsRow { border-bottom: 1px solid %1; cursor: pointer; }"
+                                   "QWidget#newsRow:hover { background: %2; }")
+                               .arg(ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
+
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(4, 4, 4, 4);
         rl->setSpacing(8);
@@ -131,6 +134,7 @@ void NewsWidget::populate(const QVector<services::NewsArticle>& articles) {
         if (!time_str.isEmpty()) {
             auto* time_lbl = new QLabel(time_str);
             time_lbl->setFixedWidth(36);
+            time_lbl->setAttribute(Qt::WA_TransparentForMouseEvents);
             time_lbl->setStyleSheet(
                 QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::CYAN()));
             rl->addWidget(time_lbl);
@@ -138,12 +142,14 @@ void NewsWidget::populate(const QVector<services::NewsArticle>& articles) {
 
         auto* headline = new QLabel(article.headline);
         headline->setWordWrap(true);
+        headline->setAttribute(Qt::WA_TransparentForMouseEvents);
         headline->setStyleSheet(
             QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
         rl->addWidget(headline, 1);
 
         if (!article.source.isEmpty()) {
             auto* src = new QLabel(article.source);
+            src->setAttribute(Qt::WA_TransparentForMouseEvents);
             src->setStyleSheet(
                 QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
             rl->addWidget(src);
@@ -155,11 +161,28 @@ void NewsWidget::populate(const QVector<services::NewsArticle>& articles) {
     }
 }
 
+bool NewsWidget::eventFilter(QObject* obj, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto* me = static_cast<QMouseEvent*>(event);
+        if (me->button() == Qt::LeftButton) {
+            QVariant prop = obj->property("article_idx");
+            if (prop.isValid()) {
+                int idx = prop.toInt();
+                if (idx >= 0 && idx < last_articles_.size()) {
+                    NewsDetailDialog::show_article(last_articles_[idx], this);
+                    return true;
+                }
+            }
+        }
+    }
+    return BaseWidget::eventFilter(obj, event);
+}
+
 void NewsWidget::retranslateUi() {
     BaseWidget::retranslateUi();
     set_title(tr("MARKET NEWS"));
     if (!last_articles_.isEmpty())
-        populate(last_articles_); // re-render "No news available." / time strings if any
+        populate(last_articles_);
 }
 
 } // namespace fincept::screens::widgets

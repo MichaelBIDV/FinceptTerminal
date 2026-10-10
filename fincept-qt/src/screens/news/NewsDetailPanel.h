@@ -73,6 +73,9 @@ class NewsDetailPanel : public QWidget {
     QLabel* summary_label_ = nullptr;
     QLabel* impact_label_ = nullptr;
     QLabel* tickers_label_ = nullptr;
+    QWidget* link_row_ = nullptr;
+    QLabel* link_title_ = nullptr;
+    QLabel* link_label_ = nullptr;
 
     // AI analysis section
     QWidget* analysis_section_ = nullptr;

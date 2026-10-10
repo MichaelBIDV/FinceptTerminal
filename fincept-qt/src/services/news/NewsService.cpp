@@ -24,6 +24,7 @@
 #include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSet>
+#include <QUrl>
 #include <QUuid>
 #include <QXmlStreamReader>
 
@@ -32,6 +33,7 @@
 #endif
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 
 namespace fincept::services {
@@ -44,6 +46,57 @@ static constexpr int kFeedTransferTimeoutMs = 4000; // 4s per RSS feed request
 // the same endpoints.
 static constexpr const char* kBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+namespace news_fetch {
+
+// Feed trên hub nội bộ http://localhost:9000 (cầu dữ liệu) bị huỷ đúng 4 giây sau khi fetch bắt
+// đầu, trong khi curl cùng URL trả 200 trong 3–14 ms. ĐO ngày 03/10/2026 bằng một chương trình Qt
+// 6.8.3 nhỏ bắn song song 63 feed hub như app (transferTimeout 4000):
+//  - host "localhost": 63/63 bị huỷ, kể cả khi nới timeout lên 15 s. Hub chỉ nghe 127.0.0.1, ::1
+//    bị từ chối, và QNetworkAccessManager không lùi về IPv4 (máy chủ thử dual-stack: 63/63 OK).
+//  - host "127.0.0.1": 62/63 OK ở 10/10 lượt; đúng một yêu cầu treo, không có socket nào mở, tới
+//    khi bị huỷ. Tái hiện được trên máy chủ thử có hàng đợi listen nhỏ: hub (backlog mặc định 5)
+//    từ chối/reset một kết nối trong loạt mở đầu và QNAM để yêu cầu đó treo thay vì báo lỗi.
+//  - 127.0.0.1 + gửi lại MỘT lần yêu cầu loopback bị huỷ: 63/63 ở 5/5 lượt.
+// Vì vậy: đổi host localhost → 127.0.0.1 lúc gửi (không sửa URL trong DB), và gửi lại đúng một lần.
+
+bool is_loopback(const QUrl& url) {
+    return url.host() == QLatin1String("127.0.0.1") ||
+           url.host().compare(QLatin1String("localhost"), Qt::CaseInsensitive) == 0;
+}
+
+QNetworkRequest feed_request(const RSSFeed& feed) {
+    QUrl url(feed.url);
+    if (url.host().compare(QLatin1String("localhost"), Qt::CaseInsensitive) == 0)
+        url.setHost(QStringLiteral("127.0.0.1"));
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
+    req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setTransferTimeout(kFeedTransferTimeoutMs);
+    return req;
+}
+
+/// GET một feed; feed loopback bị huỷ vì hết transferTimeout thì gửi lại đúng một lần. `done` nhận
+/// reply cuối cùng và vẫn chịu trách nhiệm deleteLater() nó như trước.
+void get_feed(QNetworkAccessManager* nam, QObject* ctx, const RSSFeed& feed,
+              std::function<void(QNetworkReply*)> done, bool retried = false) {
+    QNetworkReply* reply = nam->get(feed_request(feed));
+    QObject::connect(reply, &QNetworkReply::finished, ctx, [nam, ctx, feed, done, reply, retried]() {
+        if (!retried && reply->error() == QNetworkReply::OperationCanceledError &&
+            is_loopback(reply->request().url())) {
+            reply->deleteLater();
+            LOG_INFO("NewsService", QString("Feed %1 (%2) canceled on loopback after %3 ms, retrying once")
+                                        .arg(feed.id, feed.source)
+                                        .arg(kFeedTransferTimeoutMs));
+            get_feed(nam, ctx, feed, done, true);
+            return;
+        }
+        done(reply);
+    });
+}
+
+} // namespace news_fetch
 
 NewsService& NewsService::instance() {
     static NewsService s;
@@ -120,14 +173,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
     state->service = this;
 
     for (const auto& feed : feeds) {
-        QNetworkRequest req(QUrl(feed.url));
-        req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
-        req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-        req.setTransferTimeout(kFeedTransferTimeoutMs);
-
-        auto* reply = nam_->get(req);
-        connect(reply, &QNetworkReply::finished, this, [reply, feed, state]() {
+        news_fetch::get_feed(nam_, this, feed, [feed, state](QNetworkReply* reply) {
             reply->deleteLater();
 
             QVector<NewsArticle> articles;
@@ -281,14 +327,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
     state->service = this;
 
     for (const auto& feed : feeds) {
-        QNetworkRequest req(QUrl(feed.url));
-        req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
-        req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-        req.setTransferTimeout(kFeedTransferTimeoutMs);
-
-        auto* reply = nam_->get(req);
-        connect(reply, &QNetworkReply::finished, this, [reply, feed, state, total, this]() {
+        news_fetch::get_feed(nam_, this, feed, [feed, state, total, this](QNetworkReply* reply) {
             reply->deleteLater();
 
             QVector<NewsArticle> batch;

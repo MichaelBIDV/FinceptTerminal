@@ -18,6 +18,8 @@
 #include <QtConcurrent>
 #include <QPointer>
 
+#include <algorithm>
+
 namespace fincept {
 
 StorageManager& StorageManager::instance() {
@@ -608,6 +610,29 @@ Result<void> StorageManager::prune_all() {
         LOG_INFO("StorageManager", QString("Retention: removed %1 workflow_audit_log rows older than %2 days")
                                        .arg(audit)
                                        .arg(kAuditLogRetentionDays));
+    }
+
+    // notification_history, written by NotificationRepository (table created
+    // lazily, so it may not exist yet). received_at is epoch ms. Keep 30 days,
+    // and never more than the newest 5,000 rows (an inbox flood is bounded too).
+    {
+        constexpr int kNotifRetentionDays = 30;
+        constexpr int kNotifMaxRows = 5000;
+        const qint64 cutoff_ms = QDateTime::currentMSecsSinceEpoch() -
+                                 static_cast<qint64>(kNotifRetentionDays) * 86400LL * 1000LL;
+        int removed = prune_main_db("notification_history", "received_at < ?", {cutoff_ms});
+        // NULL when there are <= kNotifMaxRows rows, so nothing is deleted then.
+        const int over_cap = prune_main_db(
+            "notification_history",
+            "id <= (SELECT id FROM notification_history ORDER BY id DESC LIMIT 1 OFFSET ?)", {kNotifMaxRows});
+        removed = std::max(removed, 0) + std::max(over_cap, 0);
+        if (removed > 0) {
+            total += removed;
+            LOG_INFO("StorageManager", QString("Retention: removed %1 notification_history rows (>%2 days or >%3 rows)")
+                                           .arg(removed)
+                                           .arg(kNotifRetentionDays)
+                                           .arg(kNotifMaxRows));
+        }
     }
 
     // sync_outbox — rows leave only via mark_done(); a permanently failing push

@@ -4,6 +4,7 @@
 #include "screens/common/IStatefulScreen.h"
 #include "services/news/NewsClusterService.h"
 #include "services/news/NewsMonitorService.h"
+#include "services/news/NewsImpactRanker.h"
 #include "services/news/NewsService.h"
 
 #include <QHBoxLayout>
@@ -85,9 +86,12 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
 
     void refresh_data(bool force);
     void apply_filters_async();
+    /// @param bang  ba tin tác động mạnh nhất của mỗi thị trường (Mỹ · VN · TQ · Châu Âu),
+    ///              đã chấm ở luồng nền để không khoá giao diện.
     void update_ui_from_filtered(int generation, const QVector<services::NewsArticle>& filtered,
                                  const QVector<services::NewsCluster>& clusters,
-                                 const QMap<QString, int>& category_counts, int bullish, int bearish, int neutral);
+                                 const QMap<QString, int>& category_counts, int bullish, int bearish, int neutral,
+                                 const QVector<services::RankedArticle>& bang);
     void update_monitors();
     void compute_deviations();
     void sort_articles(QVector<services::NewsArticle>& articles) const;
@@ -139,12 +143,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
         QVector<int> hourly_counts;
     };
     QMap<QString, CategoryBaseline> baselines_;
-
-    // Notification dedup
-    QSet<QString> notified_breaking_;
-    QSet<QString> notified_monitors_;
-    QSet<QString> notified_deviations_;
-    QSet<QString> notified_flash_;
 
     // Pulse animation timer
     QTimer* pulse_timer_ = nullptr;

@@ -24,6 +24,12 @@ namespace fincept::ui {
 /// to avoid colliding with the pre-existing `fincept::notifications::NotificationService`
 /// (the external-channel dispatcher: Telegram / Slack / Discord / etc.).
 /// The two have different responsibilities and should not be confused.
+///
+/// Scope: transient UI errors only (CommandPalette, QuickCommandBar, ErrorPipeline).
+/// DesktopNotifier renders posts in an in-app window and never raises an OS banner
+/// for them. Alerts (scan, news, external jobs, ...) go through
+/// fincept::notifications::NotificationService, which owns the bell, history and
+/// the desktop banner.
 class ToastService : public QObject {
     Q_OBJECT
   public:

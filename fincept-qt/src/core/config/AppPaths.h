@@ -17,6 +17,7 @@ namespace fincept {
 ///   cache/   — Tile caches and other transient network data
 ///   models/  — ML model files
 ///   runtime/ — Python interpreter, UV, virtual environments
+///   inbox/   — external-job notification inbox {tmp,new,cur,done,bad}, mode 0700
 ///
 /// Call AppPaths::ensure_all() once at startup to create every sub-directory.
 class AppPaths {
@@ -47,6 +48,10 @@ class AppPaths {
 
     /// root/crashdumps — minidumps written by the unhandled-exception filter
     static QString crashdumps();
+
+    /// profile_root/inbox — maildir-style drop box for external jobs
+    /// (tmp/ new/ cur/ done/ bad/), see THONGBAO_SPEC §2. Owner-only (0700).
+    static QString inbox();
 
     /// Create all sub-directories if they don't exist.
     /// Call once before any path is used.

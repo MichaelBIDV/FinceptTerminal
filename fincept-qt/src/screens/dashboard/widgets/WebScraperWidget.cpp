@@ -1,3 +1,4 @@
+#include "screens/news/dialogs/NewsDetailDialog.h"
 #include "screens/dashboard/widgets/WebScraperWidget.h"
 
 #include "core/logging/Logger.h"
@@ -238,6 +239,7 @@ void WebScraperWidget::build_ui() {
     table_->verticalHeader()->setVisible(false);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     table_->setSortingEnabled(true);
+    connect(table_, &QTableWidget::cellClicked, this, &WebScraperWidget::on_cell_clicked);
     vl->addWidget(table_, 1);
 }
 
@@ -535,10 +537,84 @@ void WebScraperWidget::render_selected_table() {
     const qsizetype n = std::min<qsizetype>(t.rows.size(), kMaxRowsRendered);
     QVector<QStringList> display = t.rows.mid(0, n);
     table_->set_data(display);
+
+    // Auto-hide metadata columns (link, url, mo_ta, summary) to keep table display clean
+    if (t.headers.size() > 2) {
+        for (int c = 0; c < t.headers.size(); ++c) {
+            const QString h = t.headers[c].toLower().trimmed();
+            if (h == "link" || h == "url" || h == "href" || h == "uri" ||
+                h == "mo_ta" || h == "summary" || h == "description" || h == "content") {
+                table_->setColumnHidden(c, true);
+            }
+        }
+    }
+
     table_->setSortingEnabled(true);
     if (t.rows.size() > kMaxRowsRendered) {
         set_status(tr("Showing first %1 of %2 rows").arg(n).arg(t.rows.size()));
     }
+}
+
+void WebScraperWidget::on_cell_clicked(int row, int col) {
+    Q_UNUSED(col);
+    if (table_index_ < 0 || table_index_ >= tables_.size())
+        return;
+    const ScrapedTable& t = tables_[table_index_];
+    if (row < 0 || row >= t.rows.size())
+        return;
+    const QStringList& row_data = t.rows[row];
+
+    QString title;
+    QString source;
+    QString time_str;
+    QString link_url;
+    QString summary_str;
+
+    for (int i = 0; i < t.headers.size() && i < row_data.size(); ++i) {
+        const QString h = t.headers[i].toLower().trimmed();
+        const QString val = row_data[i].trimmed();
+        if (h == "tieu_de" || h == "title" || h == "headline" || h == "subject") {
+            title = val;
+        } else if (h == "nguon" || h == "source" || h == "publisher") {
+            source = val;
+        } else if (h == "luc" || h == "time" || h == "date" || h == "published") {
+            time_str = val;
+        } else if (h == "link" || h == "url" || h == "href" || h == "uri") {
+            link_url = val;
+        } else if (h == "mo_ta" || h == "summary" || h == "description" || h == "content") {
+            summary_str = val;
+        }
+    }
+
+    if (link_url.isEmpty()) {
+        for (const QString& cell : row_data) {
+            if (cell.startsWith("http://") || cell.startsWith("https://")) {
+                link_url = cell.trimmed();
+                break;
+            }
+        }
+    }
+
+    if (title.isEmpty()) {
+        for (const QString& cell : row_data) {
+            if (!cell.startsWith("http") && cell.length() > title.length())
+                title = cell;
+        }
+    }
+
+    if (title.isEmpty() && link_url.isEmpty())
+        return;
+
+    services::NewsArticle article;
+    article.id = QString("scraper_%1_%2").arg(table_index_).arg(row);
+    article.headline = title.isEmpty() ? tr("Article") : title;
+    article.source = source.isEmpty() ? tr("WEB") : source;
+    article.time = time_str;
+    article.link = link_url;
+    article.summary = summary_str;
+    article.category = "SCRAPER";
+
+    NewsDetailDialog::show_article(article, this);
 }
 
 void WebScraperWidget::set_status(const QString& msg, bool error) {

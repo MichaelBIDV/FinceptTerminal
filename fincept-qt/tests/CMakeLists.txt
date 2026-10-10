@@ -23,7 +23,7 @@
 # signal about the unit, not about this file: extract the pure logic into a small
 # header (or a leaf .cpp) and test that. Do not grow the link line.
 #
-# Current cost of the whole suite: 3 executables, 5 translation units.
+# Current cost of the whole suite: 7 executables, 12 translation units.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Qt Test ships with every Qt installation, so this adds no new dependency.
@@ -119,4 +119,26 @@ fincept_add_test(tst_order_validator
     tst_order_validator.cpp
     "${PROJECT_SOURCE_DIR}/src/trading/OrderValidator.cpp")
 
-message(STATUS "Fincept tests: tst_broker_modify_fields, tst_result, tst_order_validator")
+# src/services/notifications/InboxSchema.h, header-only (Qt Core). Includes
+# NotificationService.h only for the request type; nothing from its .cpp is referenced.
+fincept_add_test(tst_inbox_schema
+    tst_inbox_schema.cpp)
+
+# src/ui/widgets/NotifToastPolicy.h, header-only (includes services/notifications/NotificationService.h,
+# QtCore only), zero app sources.
+fincept_add_test(tst_notif_toast_policy
+    tst_notif_toast_policy.cpp)
+
+# src/ui/notifications/DesktopNotifyPolicy.h, header-only, zero app sources.
+fincept_add_test(tst_desktop_policy
+    tst_desktop_policy.cpp)
+
+# src/services/news/NewsViText + NewsViClassifier: QtCore only; NewsViText logs via
+# core/logging/Logger.cpp (QtCore only).
+fincept_add_test(tst_vi_classifier
+    tst_vi_classifier.cpp
+    "${PROJECT_SOURCE_DIR}/src/services/news/NewsViText.cpp"
+    "${PROJECT_SOURCE_DIR}/src/services/news/NewsViClassifier.cpp"
+    "${PROJECT_SOURCE_DIR}/src/core/logging/Logger.cpp")
+
+message(STATUS "Fincept tests: tst_broker_modify_fields, tst_result, tst_order_validator, tst_inbox_schema, tst_notif_toast_policy, tst_desktop_policy, tst_vi_classifier")

@@ -6,6 +6,7 @@
 #include "core/symbol/SymbolRef.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/widgets/NotifBell.h"
 
 #include <QEvent>
 
@@ -44,6 +45,11 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
 
     ready_label_ = mk({}, "sbReady");
     hl->addWidget(ready_label_);
+
+    // App-wide notification bell; owns its history popup (opens upward).
+    hl->addWidget(mk("  |  ", "sbSep"));
+    notif_bell_ = new NotifBell(this);
+    hl->addWidget(notif_bell_);
 
     retranslateUi();
 

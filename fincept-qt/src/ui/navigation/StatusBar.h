@@ -10,7 +10,10 @@ enum class SymbolGroup : char;
 
 namespace fincept::ui {
 
-/// Bottom status bar: version, feed indicators, ready status, active-symbol indicator.
+class NotifBell;
+
+/// Bottom status bar: version, feed indicators, ready status, active-symbol indicator,
+/// and the app-wide notification bell (one per WindowFrame).
 /// Internationalised — READY/BUSY label retranslates on QEvent::LanguageChange.
 class StatusBar : public QWidget {
     Q_OBJECT
@@ -31,6 +34,7 @@ class StatusBar : public QWidget {
 
     QLabel* ready_label_ = nullptr;
     QLabel* link_label_ = nullptr;
+    NotifBell* notif_bell_ = nullptr;
     /// Tracks the current ready/busy state so retranslateUi() can recompute
     /// the translated label without depending on the existing widget text.
     bool ready_state_ = true;

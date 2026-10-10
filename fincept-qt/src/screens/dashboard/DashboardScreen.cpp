@@ -104,11 +104,9 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     status_bar_ = new DashboardStatusBar;
     vl->addWidget(status_bar_);
 
-    // ── In-app notification toast (overlay, not in layout) ────────────────────
+    // ── Local toast (overlay, not in layout) for dashboard-only warnings ──────
+    // Service notifications toast app-wide from WindowFrame, not from here.
     notif_toast_ = new fincept::ui::NotifToast(this);
-    connect(&fincept::notifications::NotificationService::instance(),
-            &fincept::notifications::NotificationService::notification_received, notif_toast_,
-            &fincept::ui::NotifToast::show_notification);
 
     // ── Debounced save timer (P3: not started in constructor) ──
     save_timer_ = new QTimer(this);

@@ -67,6 +67,7 @@ class WebScraperWidget : public BaseWidget {
     void on_refresh_clicked();
     void on_table_selected(int index);
     void on_auto_refresh_tick();
+    void on_cell_clicked(int row, int col);
 
   private:
     void build_ui();

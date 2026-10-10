@@ -47,9 +47,11 @@ class NotificationsSection : public QWidget {
     QHash<QString, ProviderWidgets> provider_widgets_;
 
     QCheckBox* trigger_inapp_ = nullptr;
+    QCheckBox* trigger_desktop_ = nullptr; ///< notifications.desktop (macOS banners)
     QCheckBox* trigger_price_ = nullptr;
     QCheckBox* trigger_news_ = nullptr;
     QCheckBox* trigger_orders_ = nullptr;
+    QCheckBox* trigger_external_ = nullptr; ///< notifications.external (app inbox jobs)
 
     // News alert sub-options (visible only when trigger_news_ is checked)
     QCheckBox* news_breaking_ = nullptr;
@@ -66,12 +68,16 @@ class NotificationsSection : public QWidget {
     // Trigger / news-subopt row labels + descriptions (cached for retranslateUi).
     QLabel* row_inapp_lbl_ = nullptr;
     QLabel* row_inapp_desc_ = nullptr;
+    QLabel* row_desktop_lbl_ = nullptr;
+    QLabel* row_desktop_desc_ = nullptr;
     QLabel* row_price_lbl_ = nullptr;
     QLabel* row_price_desc_ = nullptr;
     QLabel* row_news_lbl_ = nullptr;
     QLabel* row_news_desc_ = nullptr;
     QLabel* row_orders_lbl_ = nullptr;
     QLabel* row_orders_desc_ = nullptr;
+    QLabel* row_external_lbl_ = nullptr;
+    QLabel* row_external_desc_ = nullptr;
     QLabel* row_breaking_lbl_ = nullptr;
     QLabel* row_breaking_desc_ = nullptr;
     QLabel* row_monitors_lbl_ = nullptr;

@@ -1,5 +1,6 @@
 #pragma once
 #include <QDateTime>
+#include <QMutex>
 #include <QObject>
 #include <QString>
 #include <QVector>
@@ -13,7 +14,8 @@ namespace fincept::notifications {
 // ── Enumerations ──────────────────────────────────────────────────────────────
 
 enum class NotifLevel { Info, Warning, Alert, Critical };
-enum class NotifTrigger { Manual, PriceAlert, OrderFill, NewsAlert, WorkflowNode };
+// External MUST stay last: values are persisted as INT in notification_history.
+enum class NotifTrigger { Manual, PriceAlert, OrderFill, NewsAlert, WorkflowNode, External };
 
 // ── Data structures ───────────────────────────────────────────────────────────
 
@@ -22,11 +24,16 @@ struct NotificationRequest {
     QString message;
     NotifLevel level = NotifLevel::Info;
     NotifTrigger trigger = NotifTrigger::Manual;
-    QDateTime timestamp{QDateTime::currentDateTime()};
+    QDateTime timestamp{QDateTime::currentDateTime()}; ///< time of the EVENT (inbox: field "ts")
+    QString source;          ///< "news" | "scan" | "workflow" | "trading" | "system" | "external:<src>"
+    QString dedupe_key;      ///< empty = no de-duplication
+    int dedupe_s{0};         ///< >0: drop if a record with the same dedupe_key exists within this window
+    bool local_only{false};  ///< true: never forwarded to external providers (Telegram, Slack, ...)
+    QString action_screen;   ///< DockScreenRouter screen id to open on click; empty = none
 };
 
 struct NotificationRecord {
-    int id{0};
+    qint64 id{0};
     NotificationRequest request;
     bool read{false};
     QDateTime received_at{QDateTime::currentDateTime()};
@@ -85,10 +92,16 @@ class NotificationService : public QObject {
                  std::function<void(bool ok, QString error)> cb);
 
     // ── History ───────────────────────────────────────────────────────────────
-    const QVector<NotificationRecord>& history() const;
+    /// Most-recent-first copy, safe to call from any thread.
+    QVector<NotificationRecord> history_snapshot(int limit = 200) const;
     int unread_count() const;
-    void mark_read(int id);
+    /// Safe from any thread (re-dispatched to the application thread).
+    void mark_read(qint64 id);
     void mark_all_read();
+
+    /// Reads a boolean setting with the correct "absent/empty -> default" rule.
+    /// Keys: notifications.inapp, notifications.desktop, notifications.external, ...
+    static bool setting_enabled(const QString& key, bool def);
 
     // ── Provider access (for settings page) ──────────────────────────────────
     QVector<INotificationProvider*> providers() const;
@@ -104,11 +117,16 @@ class NotificationService : public QObject {
   private:
     explicit NotificationService();
     void register_providers();
+    void load_history();
+    bool is_duplicate(const NotificationRequest& req, const QDateTime& now) const;
 
     std::vector<std::unique_ptr<INotificationProvider>> providers_;
-    QVector<NotificationRecord> history_;
-    int next_id_{1};
+    // history_ / unread_ are written only on the application thread but read by
+    // history_snapshot()/unread_count() from any thread (MCP tools run on workers).
+    mutable QMutex mutex_;
+    QVector<NotificationRecord> history_; ///< most recent first, capped in RAM; SQLite is the source of truth
     int unread_{0};
+    qint64 transient_id_{0}; ///< negative ids for records the DB could not persist
 };
 
 } // namespace fincept::notifications

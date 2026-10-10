@@ -250,7 +250,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     lang_filter_combo_->setObjectName("newsCommandBarCombo");
     lang_filter_combo_->setFixedHeight(18);
     lang_filter_combo_->setFixedWidth(44);
-    lang_filter_combo_->addItems({"ALL", "EN", "FR", "DE", "ES", "AR", "ZH", "JA", "HI", "RU"});
+    lang_filter_combo_->addItems({"ALL", "EN", "VI", "FR", "DE", "ES", "AR", "ZH", "JA", "HI", "RU"});
     hl->addWidget(lang_filter_combo_);
     connect(lang_filter_combo_, &QComboBox::currentTextChanged, this, &NewsCommandBar::language_filter_changed);
 

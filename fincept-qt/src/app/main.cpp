@@ -68,8 +68,11 @@
 #include "services/maritime/MaritimeService.h"
 #include "services/maritime/PortsCatalog.h"
 #include "services/markets/MarketDataService.h"
+#include "services/news/NewsAlertService.h"
 #include "services/news/NewsService.h"
 #include "services/notebooks/NotebookLibraryService.h"
+#include "services/notifications/InboxService.h"
+#include "services/notifications/NotificationService.h"
 #include "services/options/FiiDiiService.h"
 #include "services/options/OISnapshotter.h"
 #include "services/options/OptionChainService.h"
@@ -1124,9 +1127,38 @@ int main(int argc, char* argv[]) {
     // after the self-test early-returns, so the headless guard is preserved.
     QTimer::singleShot(0, qApp, []() { fincept::trading::PaperMarkService::instance().start(); });
 
-    // Native desktop notifications (Win toast / macOS Notification Center / Linux
-    // libnotify) via a tray icon — also surfaces every in-app ToastService toast.
+    // App-wide notification core. Constructed HERE, on the GUI thread and after
+    // Database::open(), so it never first comes to life on a worker (MCP tool
+    // handlers, workflow nodes, EventBus publishers) and loads its persisted
+    // history before any bell or toast asks for unread_count().
+    (void)fincept::notifications::NotificationService::instance();
+
+    // Native desktop banners + Dock badge for NotificationService records
+    // (THONGBAO_SPEC §4). ToastService UI errors stay in-app only.
     fincept::ui::DesktopNotifier::instance().init();
+
+    // External-job inbox (<profile_root>/inbox, THONGBAO_SPEC §2), and next to it
+    // the app-level news alerts (§5). Deferred so the first scan stays off the
+    // pre-window path.
+    //
+    // NOT in --smoke-test / --selftest* runs. The self-test early-returns above
+    // do not cover --smoke-test, which boots the full GUI on the same profile:
+    // a smoke walk would move real inbox messages to done/ and record them in
+    // fincept.db, so the running app would later dedupe them and never show
+    // them. Same argv scan as the retention sweeper's headless_run above (that
+    // flag is scoped to the DB-open block, and smoke_mode is computed below).
+    const bool headless_notify = [argc, argv]() {
+        for (int i = 1; i < argc; ++i) {
+            if (qstrcmp(argv[i], "--smoke-test") == 0 || qstrncmp(argv[i], "--selftest", 10) == 0)
+                return true;
+        }
+        return false;
+    }();
+    if (!headless_notify) {
+        QTimer::singleShot(0, qApp, []() { fincept::notifications::InboxService::instance().start(); });
+        // After NewsService::ensure_registered_with_hub() above: subscribes to news:general.
+        QTimer::singleShot(0, qApp, []() { fincept::services::NewsAlertService::instance().start(); });
+    }
 
     // ── Python environment check ─────────────────────────────────────────────
     // check_status() fast path (sentinel + markers present) is synchronous and

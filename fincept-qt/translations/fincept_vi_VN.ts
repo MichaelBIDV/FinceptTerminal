@@ -18201,12 +18201,20 @@ Nhấp '+ Thêm' để thêm một máy chủ.</translation>
         <translation>✓ Đã gửi thành công</translation>
     </message>
     <message>
-        <source>In-App Alerts (toast + bell)</source>
-        <translation>Cảnh báo trong ứng dụng (toast + chuông)</translation>
+        <source>In-App Toasts</source>
+        <translation>Toast trong ứng dụng</translation>
     </message>
     <message>
-        <source>Show slide-in toasts and update bell badge.</source>
-        <translation>Hiển thị toast trượt vào và cập nhật huy hiệu chuông.</translation>
+        <source>Show slide-in toasts in the focused window. The bell always counts new alerts.</source>
+        <translation>Hiện toast trượt vào ở cửa sổ đang dùng. Chuông luôn đếm cảnh báo mới.</translation>
+    </message>
+    <message>
+        <source>macOS desktop notifications</source>
+        <translation>Thông báo màn hình macOS</translation>
+    </message>
+    <message>
+        <source>Show macOS banners while the terminal is in the background (Critical alerts always).</source>
+        <translation>Hiện banner macOS khi terminal chạy nền (cảnh báo Critical thì luôn hiện).</translation>
     </message>
     <message>
         <source>Price Alerts</source>
@@ -18263,6 +18271,14 @@ Nhấp '+ Thêm' để thêm một máy chủ.</translation>
     <message>
         <source>Notify when orders are filled or rejected.</source>
         <translation>Thông báo khi lệnh được khớp hoặc bị từ chối.</translation>
+    </message>
+    <message>
+        <source>External module alerts (inbox)</source>
+        <translation>Cảnh báo từ module ngoài (hộp thư)</translation>
+    </message>
+    <message>
+        <source>Accept alerts that local jobs drop into the app inbox. They stay in the app and are never forwarded to providers.</source>
+        <translation>Nhận cảnh báo do các job trên máy đẩy vào hộp thư của app. Tin chỉ nằm trong app, không bao giờ chuyển ra nhà cung cấp.</translation>
     </message>
     <message>
         <source>Save All Providers</source>
@@ -39301,6 +39317,29 @@ X-API-Key: xyz</translation>
     </message>
 </context>
 <context>
+    <name>fincept::services::NewsAlertService</name>
+    <message>
+        <source>FLASH: %1</source>
+        <translation>KHẨN: %1</translation>
+    </message>
+    <message>
+        <source>BREAKING: %1</source>
+        <translation>NÓNG: %1</translation>
+    </message>
+    <message>
+        <source>WATCH "%1": %2</source>
+        <translation>THEO DÕI "%1": %2</translation>
+    </message>
+    <message>
+        <source>DEVIATION: %1 news spike</source>
+        <translation>ĐỘ LỆCH: tin %1 tăng đột biến</translation>
+    </message>
+    <message>
+        <source>Unusual volume detected (z-score: %1). More %2 articles than normal.</source>
+        <translation>Khối lượng tin bất thường (z-score: %1). Số bài %2 nhiều hơn bình thường.</translation>
+    </message>
+</context>
+<context>
     <name>fincept::surface::Surface3DWidget</name>
     <message>
         <source>3D NOT APPLICABLE</source>
@@ -39891,6 +39930,17 @@ X-API-Key: xyz</translation>
     </message>
 </context>
 <context>
+    <name>fincept::ui::DesktopNotifier</name>
+    <message>
+        <source>1 new notification</source>
+        <translation>1 thông báo mới</translation>
+    </message>
+    <message>
+        <source>%1 new notifications</source>
+        <translation>%1 thông báo mới</translation>
+    </message>
+</context>
+<context>
     <name>fincept::ui::IndicatorParamDialog</name>
     <message>
         <source>Indicator Parameters</source>
@@ -39962,6 +40012,13 @@ X-API-Key: xyz</translation>
     </message>
 </context>
 <context>
+    <name>fincept::ui::NotifBell</name>
+    <message>
+        <source>ALERTS</source>
+        <translation>CẢNH BÁO</translation>
+    </message>
+</context>
+<context>
     <name>fincept::ui::NotifPanel</name>
     <message>
         <source>NOTIFICATIONS</source>
@@ -39974,6 +40031,46 @@ X-API-Key: xyz</translation>
     <message>
         <source>No notifications</source>
         <translation>Không có thông báo</translation>
+    </message>
+    <message>
+        <source>&lt; Back</source>
+        <translation>&lt; Quay lại</translation>
+    </message>
+    <message>
+        <source>Info</source>
+        <translation>Thông tin</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>Cảnh báo</translation>
+    </message>
+    <message>
+        <source>Alert</source>
+        <translation>Báo động</translation>
+    </message>
+    <message>
+        <source>Critical</source>
+        <translation>Khẩn cấp</translation>
+    </message>
+    <message>
+        <source>(no title)</source>
+        <translation>(không có tiêu đề)</translation>
+    </message>
+    <message>
+        <source>event %1</source>
+        <translation>sự kiện %1</translation>
+    </message>
+    <message>
+        <source>received %1</source>
+        <translation>nhận lúc %1</translation>
+    </message>
+    <message>
+        <source>(no details)</source>
+        <translation>(không có nội dung chi tiết)</translation>
+    </message>
+    <message>
+        <source>Open %1 &gt;</source>
+        <translation>Mở %1 &gt;</translation>
     </message>
 </context>
 <context>

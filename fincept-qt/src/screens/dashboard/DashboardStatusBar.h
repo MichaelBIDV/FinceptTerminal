@@ -7,19 +7,12 @@
 #include <QTimer>
 #include <QWidget>
 
-// Forward declarations — avoids pulling notification headers into every TU
-// that includes DashboardStatusBar.h
-namespace fincept::ui {
-class NotifBell;
-class NotifPanel;
-} // namespace fincept::ui
-
 namespace fincept::screens {
 
 class PendingOrdersBadge;
 
-/// Bottom status bar — session uptime, feed indicators, system status,
-/// and notification bell with unread badge (right side).
+/// Bottom status bar — session uptime, feed indicators, system status.
+/// The notification bell is app-wide now and lives in ui::StatusBar.
 class DashboardStatusBar : public QWidget {
     Q_OBJECT
   public:
@@ -45,7 +38,6 @@ class DashboardStatusBar : public QWidget {
     void update_memory();
     void ping_api();
     void set_latency(int ms); // -1 = timeout/error
-    void toggle_notif_panel();
     void retranslateUi();
 
     QLabel* version_label_ = nullptr;
@@ -66,8 +58,6 @@ class DashboardStatusBar : public QWidget {
     QString mem_color_applied_;
 
     PendingOrdersBadge* pending_badge_ = nullptr;
-    fincept::ui::NotifBell* notif_bell_ = nullptr;
-    fincept::ui::NotifPanel* notif_panel_ = nullptr;
 
     QTimer uptime_timer_;
     QTimer ping_timer_;

@@ -14,13 +14,12 @@
 #include "services/cloud/CloudSyncEngine.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
-#include "services/notifications/NotificationService.h"
 #include "storage/repositories/NewsArticleRepository.h"
-#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
 
 #include <QDateTime>
+#include <climits>
 #include <QDesktopServices>
 #include <QPointer>
 #include <QScrollBar>
@@ -871,16 +870,41 @@ void NewsScreen::apply_filters_async() {
                 neutral++;
         }
 
-        // Sort
+        // ── Sort ──────────────────────────────────────────────────────────────
+        // Băng "3 tin mỗi thị trường" được chấm ở ĐÂY, trong luồng nền, vì nó quét toàn bộ
+        // danh sách qua vài trăm từ khoá — chạy trên luồng giao diện là giật.
+        const int64_t now_ts = QDateTime::currentSecsSinceEpoch();
+        const QVector<services::RankedArticle> bang = services::top_by_market(filtered, 3, now_ts);
+
         if (sort == "NEWEST") {
             std::sort(filtered.begin(), filtered.end(),
                       [](const auto& a, const auto& b) { return a.sort_ts > b.sort_ts; });
         } else {
-            std::sort(filtered.begin(), filtered.end(), [](const auto& a, const auto& b) {
-                if (a.priority != b.priority)
-                    return static_cast<int>(a.priority) < static_cast<int>(b.priority);
-                return a.sort_ts > b.sort_ts;
-            });
+            // RELEVANCE trước đây sắp theo `priority`, mà `priority` lên FLASH chỉ vì tiêu đề có
+            // chữ "breaking"/"alert" và lên BREAKING vì có chữ "report" — gần như bài nào cũng
+            // dính, nên REL chạy ra đúng bằng NEW. Giờ REL nghĩa là TÁC ĐỘNG THỊ TRƯỜNG: băng
+            // bốn thị trường lên đầu, phần còn lại xếp theo điểm.
+            QHash<QString, int> thu_tu_bang;
+            for (int i = 0; i < bang.size(); ++i)
+                thu_tu_bang.insert(bang[i].article.id, i);
+
+            QHash<QString, int> diem;
+            diem.reserve(filtered.size());
+            for (const auto& a : filtered)
+                diem.insert(a.id, services::rank_article(a, now_ts).score);
+
+            std::stable_sort(filtered.begin(), filtered.end(),
+                             [&thu_tu_bang, &diem](const auto& a, const auto& b) {
+                                 const int ba = thu_tu_bang.value(a.id, INT_MAX);
+                                 const int bb = thu_tu_bang.value(b.id, INT_MAX);
+                                 if (ba != bb)
+                                     return ba < bb;
+                                 const int da = diem.value(a.id, 0);
+                                 const int db = diem.value(b.id, 0);
+                                 if (da != db)
+                                     return da > db;
+                                 return a.sort_ts > b.sort_ts;
+                             });
         }
 
         auto clusters = services::cluster_articles(filtered);
@@ -901,14 +925,15 @@ void NewsScreen::apply_filters_async() {
 
         QMetaObject::invokeMethod(
             self,
-            [self, gen, filtered, clusters, category_counts, bullish, bearish, neutral]() {
+            [self, gen, filtered, clusters, category_counts, bullish, bearish, neutral, bang]() {
                 if (!self)
                     return;
                 if (gen < self->filter_generation_.load(std::memory_order_relaxed)) {
                     LOG_INFO("NewsScreen", QString("Rejected stale filter gen %1").arg(gen));
                     return;
                 }
-                self->update_ui_from_filtered(gen, filtered, clusters, category_counts, bullish, bearish, neutral);
+                self->update_ui_from_filtered(gen, filtered, clusters, category_counts, bullish, bearish, neutral,
+                                              bang);
             },
             Qt::QueuedConnection);
     });
@@ -917,7 +942,7 @@ void NewsScreen::apply_filters_async() {
 void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<services::NewsArticle>& filtered,
                                          const QVector<services::NewsCluster>& clusters,
                                          const QMap<QString, int>& category_counts, int bullish, int bearish,
-                                         int neutral) {
+                                         int neutral, const QVector<services::RankedArticle>& bang) {
 
     LOG_INFO("NewsScreen",
              QString("update_ui_from_filtered: %1 articles, %2 clusters").arg(filtered.size()).arg(clusters.size()));
@@ -952,42 +977,17 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     // Side panel (drawer) — still gets data for when user opens it
     side_panel_->update_sentiment(bullish, bearish, neutral);
 
-    // Top 5 stories
-    QVector<services::NewsArticle> top5;
-    for (int i = 0; i < std::min(5, static_cast<int>(filtered.size())); i++)
-        top5.append(filtered[i]);
-    side_panel_->update_top_stories(top5);
+    // Panel "TIN HÀNG ĐẦU" trước đây là filtered[0..4] — tức năm bài MỚI NHẤT, nên ngày
+    // 21/09/2026 nó hiện: Rebel Wilson hầu toà · một vụ nổ súng · chính sách nhà trẻ Úc.
+    // Không có tin thị trường nào. Giờ nó là ba tin tác động mạnh nhất của từng thị trường.
+    side_panel_->update_top_by_market(bang);
     side_panel_->update_categories(category_counts);
 
-    // Breaking banner
+    // Breaking banner. Thông báo BREAKING/FLASH/WATCH/DEVIATION do services::NewsAlertService sinh
+    // ở mức app trên danh sách CHƯA lọc; màn này chỉ còn vẽ.
     auto breaking = services::get_breaking_clusters(clusters);
-    if (!breaking.isEmpty()) {
+    if (!breaking.isEmpty())
         feed_panel_->show_breaking(breaking);
-
-        auto& repo = fincept::SettingsRepository::instance();
-        auto get_bool = [&](const QString& key, bool def) -> bool {
-            auto r = repo.get(key);
-            return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
-        };
-        if (get_bool("notifications.news_breaking", true)) {
-            using namespace fincept::notifications;
-            for (const auto& cluster : breaking) {
-                const QString& lead_id = cluster.lead_article.id;
-                if (notified_breaking_.contains(lead_id))
-                    continue;
-                notified_breaking_.insert(lead_id);
-
-                NotificationRequest req;
-                req.title = QString("BREAKING: %1").arg(cluster.lead_article.headline.left(80));
-                req.message = cluster.lead_article.summary.isEmpty() ? cluster.lead_article.source
-                                                                     : cluster.lead_article.summary.left(160);
-                req.level = cluster.lead_article.priority == services::Priority::FLASH ? NotifLevel::Critical
-                                                                                       : NotifLevel::Alert;
-                req.trigger = NotifTrigger::NewsAlert;
-                NotificationService::instance().send(req);
-            }
-        }
-    }
 
     // Ticker strip
     QVector<services::NewsArticle> ticker_articles;
@@ -1089,34 +1089,6 @@ void NewsScreen::update_monitors() {
     for (auto it = matches.begin(); it != matches.end(); ++it)
         total_alerts += it.value().size();
     command_bar_->update_monitor_summary(monitors.size(), total_alerts);
-
-    // Notifications
-    auto& repo = fincept::SettingsRepository::instance();
-    auto get_bool = [&](const QString& key, bool def) -> bool {
-        auto r = repo.get(key);
-        return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
-    };
-    if (get_bool("notifications.news_monitors", true)) {
-        using namespace fincept::notifications;
-        for (const auto& monitor : monitors) {
-            if (!monitor.enabled)
-                continue;
-            const auto& articles = matches.value(monitor.id);
-            for (const auto& article : articles) {
-                const QString dedup_key = monitor.id + ":" + article.id;
-                if (notified_monitors_.contains(dedup_key))
-                    continue;
-                notified_monitors_.insert(dedup_key);
-
-                NotificationRequest req;
-                req.title = QString("WATCH \"%1\": %2").arg(monitor.label, article.headline.left(70));
-                req.message = article.summary.isEmpty() ? article.source : article.summary.left(160);
-                req.level = NotifLevel::Warning;
-                req.trigger = NotifTrigger::NewsAlert;
-                NotificationService::instance().send(req);
-            }
-        }
-    }
 }
 
 void NewsScreen::compute_deviations() {
@@ -1165,52 +1137,6 @@ void NewsScreen::compute_deviations() {
 
     side_panel_->update_deviations(deviations);
     command_bar_->update_deviations(deviations); // intel strip
-
-    // Notifications
-    auto& repo = fincept::SettingsRepository::instance();
-    auto get_bool = [&](const QString& key, bool def) -> bool {
-        auto r = repo.get(key);
-        return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
-    };
-
-    if (get_bool("notifications.news_deviations", true)) {
-        using namespace fincept::notifications;
-        for (const auto& [category, z_score] : deviations) {
-            if (notified_deviations_.contains(category))
-                continue;
-            notified_deviations_.insert(category);
-
-            NotificationRequest req;
-            req.title = QString("DEVIATION: %1 news spike").arg(category);
-            req.message = QString("Unusual volume detected (z-score: %1). More %2 articles than normal.")
-                              .arg(z_score, 0, 'f', 1)
-                              .arg(category);
-            req.level = z_score >= 5.0 ? NotifLevel::Critical : NotifLevel::Warning;
-            req.trigger = NotifTrigger::NewsAlert;
-            NotificationService::instance().send(req);
-        }
-    }
-
-    // FLASH articles
-    if (get_bool("notifications.news_flash", true)) {
-        using namespace fincept::notifications;
-        for (const auto& article : filtered_articles_) {
-            if (article.priority != services::Priority::FLASH)
-                continue;
-            if (article.impact != services::Impact::HIGH)
-                continue;
-            if (notified_flash_.contains(article.id))
-                continue;
-            notified_flash_.insert(article.id);
-
-            NotificationRequest req;
-            req.title = QString("FLASH: %1").arg(article.headline.left(80));
-            req.message = article.summary.isEmpty() ? article.source : article.summary.left(160);
-            req.level = NotifLevel::Critical;
-            req.trigger = NotifTrigger::NewsAlert;
-            NotificationService::instance().send(req);
-        }
-    }
 
     // Persist baselines
     services::NewsCorrelationService::instance().update_baseline(

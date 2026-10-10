@@ -1,6 +1,9 @@
 #include "services/news/NewsClusterService.h"
 
+#include "services/news/NewsViText.h"
+
 #include <QDateTime>
+#include <QRegularExpression>
 #include <QSet>
 #include <QUuid>
 
@@ -8,10 +11,17 @@
 
 namespace fincept::services {
 
-// Tokenize headline into lowercase words for Jaccard similarity
+// Tokenize headline into lowercase words for Jaccard similarity. `\W` must be Unicode-aware: the
+// ASCII default split Vietnamese at every accented letter ("Bộ Công Thương … găm xăng dầu" → {"tuy"}),
+// which glued unrelated VN articles into one junk cluster (61 of 1,300 on 03/10/2026). Words keep
+// their diacritics: folding merged "đồng"/"dòng"/"động" into "dong" and still glued a 7-article
+// cluster; accented tokens on the core title (bridge labels and zero-width chars removed) gave a
+// largest cluster of 9 related headlines.
 static QSet<QString> tokenize(const QString& text) {
+    static const QRegularExpression non_word(QStringLiteral("\\W+"),
+                                             QRegularExpression::UseUnicodePropertiesOption);
     QSet<QString> tokens;
-    for (const auto& w : text.toLower().split(QRegularExpression("\\W+"), Qt::SkipEmptyParts)) {
+    for (const auto& w : vitext::clean(vitext::core_title(text)).toLower().split(non_word, Qt::SkipEmptyParts)) {
         if (w.size() > 2)
             tokens.insert(w);
     }
@@ -108,8 +118,16 @@ QVector<NewsCluster> cluster_articles(const QVector<NewsArticle>& articles) {
                 bearish++;
         }
 
-        // Lead article: best tier then newest
-        std::sort(c.articles.begin(), c.articles.end(), [](const NewsArticle& a, const NewsArticle& b) {
+        // Lead article: best tier then newest. A breaking cluster leads with its MOST URGENT article
+        // instead (priority, then impact), because the breaking banner and alert title come from the
+        // lead: by tier alone a tier-1 Federal Register notice headed a cluster whose urgent item was
+        // "Khởi tố giám đốc…", so the alert carried the wrong headline.
+        const bool by_urgency = c.is_breaking;
+        std::sort(c.articles.begin(), c.articles.end(), [by_urgency](const NewsArticle& a, const NewsArticle& b) {
+            if (by_urgency && a.priority != b.priority)
+                return static_cast<int>(a.priority) < static_cast<int>(b.priority);
+            if (by_urgency && a.impact != b.impact)
+                return static_cast<int>(a.impact) < static_cast<int>(b.impact);
             if (a.tier != b.tier)
                 return a.tier < b.tier;
             return a.sort_ts > b.sort_ts;

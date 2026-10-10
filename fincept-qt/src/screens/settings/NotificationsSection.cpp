@@ -28,7 +28,7 @@ namespace {
 /// Dynamic-property guards set by reload() when a settings *read* failed.
 /// `kNotifProviderReadFailedProp` lives on each provider's body_frame (the only
 /// handle save_provider_fields() has); `kNotifTriggersReadFailedProp` lives on
-/// the section itself and covers the eight alert-trigger booleans. While set,
+/// the section itself and covers the ten alert-trigger booleans. While set,
 /// the corresponding save path refuses to write — the widgets hold defaults,
 /// not the user's values, and set() is an INSERT OR REPLACE.
 constexpr const char* kNotifProviderReadFailedProp = "fincept_notif_provider_read_failed";
@@ -317,17 +317,27 @@ void NotificationsSection::build_ui() {
 
     trigger_inapp_ = new QCheckBox;
     trigger_inapp_->setStyleSheet(check_ss());
+    trigger_desktop_ = new QCheckBox;
+    trigger_desktop_->setStyleSheet(check_ss());
     trigger_price_ = new QCheckBox;
     trigger_price_->setStyleSheet(check_ss());
     trigger_news_ = new QCheckBox;
     trigger_news_->setStyleSheet(check_ss());
     trigger_orders_ = new QCheckBox;
     trigger_orders_->setStyleSheet(check_ss());
+    trigger_external_ = new QCheckBox;
+    trigger_external_->setStyleSheet(check_ss());
 
-    auto* row_inapp =
-        make_row(tr("In-App Alerts (toast + bell)"), trigger_inapp_, tr("Show slide-in toasts and update bell badge."));
+    // notifications.inapp only gates the toast; the bell and history always record.
+    auto* row_inapp = make_row(tr("In-App Toasts"), trigger_inapp_,
+                               tr("Show slide-in toasts in the focused window. The bell always counts new alerts."));
     capture_row_labels(row_inapp, &row_inapp_lbl_, &row_inapp_desc_);
     vl->addWidget(row_inapp);
+    auto* row_desktop =
+        make_row(tr("macOS desktop notifications"), trigger_desktop_,
+                 tr("Show macOS banners while the terminal is in the background (Critical alerts always)."));
+    capture_row_labels(row_desktop, &row_desktop_lbl_, &row_desktop_desc_);
+    vl->addWidget(row_desktop);
     auto* row_price =
         make_row(tr("Price Alerts"), trigger_price_, tr("Notify when price alert thresholds are crossed."));
     capture_row_labels(row_price, &row_price_lbl_, &row_price_desc_);
@@ -382,6 +392,11 @@ void NotificationsSection::build_ui() {
         make_row(tr("Order Fill Alerts"), trigger_orders_, tr("Notify when orders are filled or rejected."));
     capture_row_labels(row_orders, &row_orders_lbl_, &row_orders_desc_);
     vl->addWidget(row_orders);
+    auto* row_external = make_row(tr("External module alerts (inbox)"), trigger_external_,
+                                  tr("Accept alerts that local jobs drop into the app inbox. They stay in the app "
+                                     "and are never forwarded to providers."));
+    capture_row_labels(row_external, &row_external_lbl_, &row_external_desc_);
+    vl->addWidget(row_external);
 
     vl->addSpacing(16);
 
@@ -404,6 +419,8 @@ void NotificationsSection::build_ui() {
             repo.set("notifications.news_monitors", b(news_monitors_->isChecked()), "notifications");
             repo.set("notifications.news_deviations", b(news_deviations_->isChecked()), "notifications");
             repo.set("notifications.news_flash", b(news_flash_->isChecked()), "notifications");
+            repo.set("notifications.external", b(trigger_external_->isChecked()), "notifications");
+            repo.set("notifications.desktop", b(trigger_desktop_->isChecked()), "notifications");
         }
 
         for (const auto& def : provider_defs())
@@ -441,14 +458,20 @@ void NotificationsSection::reload() {
         return !r.value().isEmpty() ? (r.value() == "1") : def;
     };
 
+    // Defaults mirror NotificationService / DesktopNotifier: every trigger is on
+    // until the user turns it off (absent or empty value = default).
     if (trigger_inapp_)
         trigger_inapp_->setChecked(get_bool("notifications.inapp", true));
+    if (trigger_desktop_)
+        trigger_desktop_->setChecked(get_bool("notifications.desktop", true));
+    if (trigger_external_)
+        trigger_external_->setChecked(get_bool("notifications.external", true));
     if (trigger_price_)
         trigger_price_->setChecked(get_bool("notifications.price_alerts", true));
     if (trigger_orders_)
         trigger_orders_->setChecked(get_bool("notifications.order_fills", true));
 
-    const bool news_on = get_bool("notifications.news_alerts", false);
+    const bool news_on = get_bool("notifications.news_alerts", true);
     if (trigger_news_)
         trigger_news_->setChecked(news_on);
 
@@ -532,9 +555,14 @@ void NotificationsSection::retranslateUi() {
 
     // Trigger rows.
     if (row_inapp_lbl_)
-        row_inapp_lbl_->setText(tr("In-App Alerts (toast + bell)"));
+        row_inapp_lbl_->setText(tr("In-App Toasts"));
     if (row_inapp_desc_)
-        row_inapp_desc_->setText(tr("Show slide-in toasts and update bell badge."));
+        row_inapp_desc_->setText(tr("Show slide-in toasts in the focused window. The bell always counts new alerts."));
+    if (row_desktop_lbl_)
+        row_desktop_lbl_->setText(tr("macOS desktop notifications"));
+    if (row_desktop_desc_)
+        row_desktop_desc_->setText(
+            tr("Show macOS banners while the terminal is in the background (Critical alerts always)."));
     if (row_price_lbl_)
         row_price_lbl_->setText(tr("Price Alerts"));
     if (row_price_desc_)
@@ -547,6 +575,11 @@ void NotificationsSection::retranslateUi() {
         row_orders_lbl_->setText(tr("Order Fill Alerts"));
     if (row_orders_desc_)
         row_orders_desc_->setText(tr("Notify when orders are filled or rejected."));
+    if (row_external_lbl_)
+        row_external_lbl_->setText(tr("External module alerts (inbox)"));
+    if (row_external_desc_)
+        row_external_desc_->setText(tr("Accept alerts that local jobs drop into the app inbox. They stay in the app "
+                                       "and are never forwarded to providers."));
 
     // News sub-option rows.
     if (row_breaking_lbl_)

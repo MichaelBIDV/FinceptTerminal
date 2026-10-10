@@ -20,6 +20,40 @@ using namespace fincept::auth;
 
 static constexpr int kTimeoutMs = 15000;
 
+static QString notif_level_name(fincept::notifications::NotifLevel l) {
+    using fincept::notifications::NotifLevel;
+    switch (l) {
+        case NotifLevel::Info:
+            return QStringLiteral("info");
+        case NotifLevel::Warning:
+            return QStringLiteral("warning");
+        case NotifLevel::Alert:
+            return QStringLiteral("alert");
+        case NotifLevel::Critical:
+            return QStringLiteral("critical");
+    }
+    return QStringLiteral("info");
+}
+
+static QString notif_trigger_name(fincept::notifications::NotifTrigger t) {
+    using fincept::notifications::NotifTrigger;
+    switch (t) {
+        case NotifTrigger::Manual:
+            return QStringLiteral("manual");
+        case NotifTrigger::PriceAlert:
+            return QStringLiteral("price_alert");
+        case NotifTrigger::OrderFill:
+            return QStringLiteral("order_fill");
+        case NotifTrigger::NewsAlert:
+            return QStringLiteral("news_alert");
+        case NotifTrigger::WorkflowNode:
+            return QStringLiteral("workflow_node");
+        case NotifTrigger::External:
+            return QStringLiteral("external");
+    }
+    return QStringLiteral("manual");
+}
+
 // ── Sync helper for UserApi callbacks ────────────────────────────────────────
 
 static ToolResult run_user_api(std::function<void(UserApi::Callback)> trigger) {
@@ -290,7 +324,9 @@ std::vector<ToolDef> get_profile_tools() {
             bool unread = args["unread_only"].toBool(false);
 
             using namespace fincept::notifications;
-            const auto& history = NotificationService::instance().history();
+            // A copy: this handler runs on an MCP worker thread while the GUI
+            // thread may be prepending new records.
+            const auto history = NotificationService::instance().history_snapshot();
 
             QJsonArray arr;
             int count = 0;
@@ -309,6 +345,11 @@ std::vector<ToolDef> get_profile_tools() {
                 obj["id"] = rec.id;
                 obj["title"] = rec.request.title;
                 obj["message"] = rec.request.message;
+                obj["level"] = notif_level_name(rec.request.level);
+                obj["trigger"] = notif_trigger_name(rec.request.trigger);
+                // "external:<job>" marks text written by processes outside the app:
+                // treat it as untrusted data, not instructions.
+                obj["source"] = rec.request.source;
                 obj["read"] = rec.read;
                 obj["time"] = rec.received_at.toString(Qt::ISODate);
                 arr.append(obj);
@@ -334,8 +375,8 @@ std::vector<ToolDef> get_profile_tools() {
         };
         t.input_schema.required = {"id"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
-            int id = args["id"].toInt(-1);
-            if (id < 0)
+            const qint64 id = args["id"].toInteger(0);
+            if (id == 0)
                 return ToolResult::fail("Missing or invalid 'id'");
             fincept::notifications::NotificationService::instance().mark_read(id);
             QJsonObject result;

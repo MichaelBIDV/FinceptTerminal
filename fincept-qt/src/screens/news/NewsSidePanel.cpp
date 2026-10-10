@@ -103,7 +103,7 @@ void NewsSidePanel::retranslateUi() {
     if (drawer_title_)
         drawer_title_->setText(tr("INTELLIGENCE"));
     if (top_stories_title_)
-        top_stories_title_->setText(tr("TOP STORIES"));
+        top_stories_title_->setText(tr("TIN TÁC ĐỘNG MẠNH NHẤT · 3 TIN / THỊ TRƯỜNG"));
     if (categories_title_)
         categories_title_->setText(tr("CATEGORIES"));
     if (monitors_title_)
@@ -134,7 +134,7 @@ void NewsSidePanel::toggle_drawer() {
 }
 
 void NewsSidePanel::build_top_stories_section(QVBoxLayout* parent) {
-    top_stories_title_ = new QLabel(tr("TOP STORIES"), this);
+    top_stories_title_ = new QLabel(tr("TIN TÁC ĐỘNG MẠNH NHẤT · 3 TIN / THỊ TRƯỜNG"), this);
     top_stories_title_->setObjectName("newsDrawerSectionTitle");
     parent->addWidget(top_stories_title_);
 
@@ -242,8 +242,7 @@ void NewsSidePanel::update_sentiment(int /*bullish*/, int /*bearish*/, int /*neu
     // Sentiment now shown in intel strip — no-op here for backward compat
 }
 
-void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top) {
-    // Clear existing
+void NewsSidePanel::update_top_by_market(const QVector<services::RankedArticle>& bang) {
     while (top_stories_layout_->count() > 0) {
         auto* item = top_stories_layout_->takeAt(0);
         if (item->widget())
@@ -251,22 +250,45 @@ void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top
         delete item;
     }
 
-    for (int i = 0; i < top.size(); ++i) {
-        const auto& article = top[i];
+    if (bang.isEmpty()) {
+        auto* trong = new QLabel(tr("Chưa xếp được tin nào về bốn thị trường"), this);
+        trong->setObjectName("newsDrawerHint");
+        trong->setWordWrap(true);
+        top_stories_layout_->addWidget(trong);
+        return;
+    }
+
+    // Dòng tiêu đề thị trường chỉ dựng khi thị trường ĐỔI — băng đã được xếp sẵn theo thứ tự
+    // Mỹ → Việt Nam → Trung Quốc → Châu Âu ở NewsImpactRanker::top_by_market().
+    services::Market truoc = services::Market::KHAC;
+    int so_trong_nhom = 0;
+    for (const auto& r : bang) {
+        if (r.market != truoc) {
+            truoc = r.market;
+            so_trong_nhom = 0;
+            auto* dau = new QLabel(services::market_label(r.market), this);
+            dau->setObjectName("newsDrawerSectionTitle");
+            top_stories_layout_->addWidget(dau);
+        }
+        ++so_trong_nhom;
+
         auto* btn = new QPushButton(this);
         btn->setObjectName("newsTopStoryBtn");
         btn->setCursor(Qt::PointingHandCursor);
+        btn->setText(QString("%1. %2").arg(so_trong_nhom).arg(r.article.headline.left(48)));
 
-        QString pcolor = services::priority_color(article.priority);
-        QString label = QString("%1. %2").arg(i + 1).arg(article.headline.left(50));
-        btn->setText(label);
-        btn->setToolTip(article.headline);
+        // Tooltip in ĐIỂM và đúng những tín hiệu đã cộng — mỗi dòng phải bác được, nếu không
+        // thì đây chỉ là một thứ tự khác mà không ai kiểm được.
+        btn->setToolTip(QString("%1\n\n%2  ·  điểm %3\n%4")
+                            .arg(r.article.headline, r.article.source)
+                            .arg(r.score)
+                            .arg(r.vi_sao.join(QStringLiteral(" · "))));
 
-        // Priority dot via left border color
-        btn->setStyleSheet(QString("border-left: 3px solid %1;").arg(pcolor));
+        btn->setStyleSheet(QString("border-left: 3px solid %1;")
+                               .arg(services::priority_color(r.article.priority)));
 
+        const auto article = r.article;
         connect(btn, &QPushButton::clicked, this, [this, article]() { emit article_clicked(article); });
-
         top_stories_layout_->addWidget(btn);
     }
 }

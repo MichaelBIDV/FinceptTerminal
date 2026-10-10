@@ -11,9 +11,12 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "network/http/HttpClient.h"
 #include "services/news/NewsService.h"
+#include "services/news/NewsViClassifier.h"
+#include "services/news/NewsViText.h"
 #include "storage/cache/CacheManager.h"
 
 #include <QAtomicInt>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonDocument>
 #include <QMutex>
@@ -35,6 +38,17 @@ namespace fincept::services {
 // Max chars retained from an item's description after HTML stripping.
 static constexpr int kSummaryMaxChars = 300;
 
+// vinews::Priority/Impact được ép kiểu thẳng sang enum của NewsService: giữ cùng thứ tự.
+static_assert(static_cast<int>(Priority::FLASH) == static_cast<int>(vinews::Priority::Flash) &&
+                  static_cast<int>(Priority::URGENT) == static_cast<int>(vinews::Priority::Urgent) &&
+                  static_cast<int>(Priority::BREAKING) == static_cast<int>(vinews::Priority::Breaking) &&
+                  static_cast<int>(Priority::ROUTINE) == static_cast<int>(vinews::Priority::Routine),
+              "vinews::Priority must mirror services::Priority");
+static_assert(static_cast<int>(Impact::HIGH) == static_cast<int>(vinews::Impact::High) &&
+                  static_cast<int>(Impact::MEDIUM) == static_cast<int>(vinews::Impact::Medium) &&
+                  static_cast<int>(Impact::LOW) == static_cast<int>(vinews::Impact::Low),
+              "vinews::Impact must mirror services::Impact");
+
 // ── RSS XML parser ──────────────────────────────────────────────────────────
 
 QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSSFeed& feed) {
@@ -44,7 +58,7 @@ QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSS
     bool in_item = false;
     NewsArticle current;
     QString current_tag;
-    int item_idx = 0;
+    QString current_guid;
 
     while (!reader.atEnd()) {
         auto token = reader.readNext();
@@ -54,13 +68,12 @@ QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSS
 
             if (current_tag == "item" || current_tag == "entry") {
                 in_item = true;
-                item_idx++;
                 current = {};
+                current_guid.clear();
                 current.category = feed.category;
                 current.source = feed.source;
                 current.region = feed.region;
                 current.tier = feed.tier;
-                current.id = QString("%1-%2-%3").arg(feed.id).arg(QDateTime::currentMSecsSinceEpoch()).arg(item_idx);
             }
 
             // Atom <link href="..."/> or <link rel="alternate" href="..."/>
@@ -84,9 +97,11 @@ QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSS
                 current.summary = strip_html(text).left(kSummaryMaxChars);
             } else if (current_tag == "link" && current.link.isEmpty()) {
                 current.link = text.trimmed();
-            } else if ((current_tag == "guid" || current_tag == "id") && current.link.isEmpty()) {
+            } else if (current_tag == "guid" || current_tag == "id") {
+                if (current_guid.isEmpty())
+                    current_guid = text;
                 // guid/id often contains the article URL as fallback
-                if (text.startsWith("http"))
+                if (current.link.isEmpty() && text.startsWith("http"))
                     current.link = text.trimmed();
             } else if (current_tag == "pubDate" || current_tag == "published" || current_tag == "updated" ||
                        current_tag == "date") {
@@ -116,6 +131,15 @@ QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSS
                 if (current.sort_ts == 0)
                     current.sort_ts = QDateTime::currentSecsSinceEpoch();
 
+                // id ỔN ĐỊNH giữa các lần fetch: trước đây là feed.id + mili-giây hiện tại + chỉ số,
+                // nên mỗi lần fetch là id mới và mọi chống trùng / đánh dấu đã xem theo id đều vô hiệu.
+                const QByteArray identity = (current.link + QLatin1Char('|') + current_guid + QLatin1Char('|') +
+                                             current.headline)
+                                                .toUtf8();
+                current.id = feed.id + QLatin1Char('-') +
+                             QString::fromLatin1(
+                                 QCryptographicHash::hash(identity, QCryptographicHash::Sha1).toHex().left(16));
+
                 enrich_article(current);
                 articles.append(std::move(current));
             }
@@ -141,13 +165,57 @@ void NewsService::enrich_article(NewsArticle& article) {
     const QString combined = article.headline + " " + article.summary;
     const QString text = combined.toLower();
 
-    // Priority
-    if (text.contains("breaking") || text.contains("alert"))
-        article.priority = Priority::FLASH;
-    else if (text.contains("urgent") || text.contains("emergency"))
-        article.priority = Priority::URGENT;
-    else if (text.contains("announce") || text.contains("report"))
-        article.priority = Priority::BREAKING;
+    // Language detection — Vietnamese first (Latin script + Vietnamese-only letters, checked on
+    // headline + summary), then CJK, Cyrillic, Arabic, Devanagari on the headline.
+    auto detect_lang = [](const QString& s) -> QString {
+        int cjk = 0, cyrillic = 0, arabic = 0, devanagari = 0;
+        for (const auto& ch : s) {
+            ushort u = ch.unicode();
+            if (u >= 0x4e00 && u <= 0x9fff)
+                cjk++;
+            else if (u >= 0x3040 && u <= 0x30ff)
+                return "ja"; // kana = definitely Japanese
+            else if (u >= 0xac00 && u <= 0xd7af)
+                return "ko"; // hangul = Korean
+            else if (u >= 0x0400 && u <= 0x04ff)
+                cyrillic++;
+            else if (u >= 0x0600 && u <= 0x06ff)
+                arabic++;
+            else if (u >= 0x0900 && u <= 0x097f)
+                devanagari++;
+        }
+        int total = s.size();
+        if (total == 0)
+            return "en";
+        if (cjk * 10 > total)
+            return "zh";
+        if (cyrillic * 10 > total)
+            return "ru";
+        if (arabic * 10 > total)
+            return "ar";
+        if (devanagari * 10 > total)
+            return "hi";
+        return "en";
+    };
+    article.lang = vitext::is_vietnamese(combined) ? QStringLiteral("vi") : detect_lang(article.headline);
+
+    // Priority — bộ phân loại chung (NewsViClassifier): luật tiếng Việt cho lang "vi"; tin khác
+    // giữ luật cũ breaking/alert/urgent/emergency/announce/report nhưng khớp theo biên từ và bỏ
+    // câu đóng khung "Get our breaking news email"; văn bản hành chính (Federal Register…) ép ROUTINE.
+    const vinews::Classification vc =
+        vinews::classify(article.headline, article.summary, article.source, article.category, article.region);
+    article.priority = static_cast<Priority>(static_cast<int>(vc.priority));
+
+    if (article.lang == QLatin1String("vi")) {
+        // Tiếng Việt: impact và mã CK lấy từ bộ phân loại VN. Bảng cảm xúc và luật ghi đè category
+        // tiếng Anh bên dưới KHÔNG chạy: đo 03/10/2026, "ban" khớp "ban hành" làm 183/1.300 bài
+        // thành BEARISH, "tech" khớp "Techcombank", " ai " khớp đại từ "ai".
+        article.impact = static_cast<Impact>(static_cast<int>(vc.impact));
+        article.tickers = vc.tickers;
+        article.threat = classify_threat(article, text);
+        article.source_flag = source_flag_for(article.source);
+        return;
+    }
 
     // Weighted sentiment
     struct WordWeight {
@@ -201,7 +269,9 @@ void NewsService::enrich_article(NewsArticle& article) {
 
     // Impact
     int strength = std::abs(net);
-    if (article.priority == Priority::FLASH || article.priority == Priority::URGENT || strength >= 6)
+    if (vc.is_admin)
+        article.impact = Impact::LOW; // văn bản hành chính: không để điểm cảm xúc đẩy lên HIGH
+    else if (article.priority == Priority::FLASH || article.priority == Priority::URGENT || strength >= 6)
         article.impact = Impact::HIGH;
     else if (article.priority == Priority::BREAKING || strength >= 3)
         article.impact = Impact::MEDIUM;
@@ -246,38 +316,6 @@ void NewsService::enrich_article(NewsArticle& article) {
     }
     article.tickers = found.values();
 
-    // Language detection — check for CJK, Cyrillic, Arabic, Devanagari characters
-    auto detect_lang = [](const QString& s) -> QString {
-        int cjk = 0, cyrillic = 0, arabic = 0, devanagari = 0;
-        for (const auto& ch : s) {
-            ushort u = ch.unicode();
-            if (u >= 0x4e00 && u <= 0x9fff)
-                cjk++;
-            else if (u >= 0x3040 && u <= 0x30ff)
-                return "ja"; // kana = definitely Japanese
-            else if (u >= 0xac00 && u <= 0xd7af)
-                return "ko"; // hangul = Korean
-            else if (u >= 0x0400 && u <= 0x04ff)
-                cyrillic++;
-            else if (u >= 0x0600 && u <= 0x06ff)
-                arabic++;
-            else if (u >= 0x0900 && u <= 0x097f)
-                devanagari++;
-        }
-        int total = s.size();
-        if (total == 0)
-            return "en";
-        if (cjk * 10 > total)
-            return "zh";
-        if (cyrillic * 10 > total)
-            return "ru";
-        if (arabic * 10 > total)
-            return "ar";
-        if (devanagari * 10 > total)
-            return "hi";
-        return "en";
-    };
-    article.lang = detect_lang(article.headline);
 
     // Threat classification — pass pre-built text to avoid a 3rd toLower()
     article.threat = classify_threat(article, text);

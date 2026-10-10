@@ -1,10 +1,12 @@
 #include "services/news/NewsMonitorService.h"
 
 #include "core/logging/Logger.h"
+#include "services/news/NewsViText.h"
 #include "storage/repositories/NewsMonitorRepository.h"
 
-#include <QRegularExpression>
 #include <QUuid>
+
+#include <algorithm>
 
 namespace fincept::services {
 
@@ -96,24 +98,54 @@ QMap<QString, QVector<NewsArticle>> NewsMonitorService::scan_monitors(const QVec
                                                                       const QVector<NewsArticle>& articles) const {
     QMap<QString, QVector<NewsArticle>> result;
 
+    // Keyword match on Unicode word boundaries. The old `\b…\b` regex was ASCII-only, so "khởi tố"
+    // matched 0 articles (7 expected) and "đình chỉ" never matched. A keyword typed WITH diacritics
+    // is compared against the accented lowercase text (folding would let "nằm sàn" hit "Việt Nam sẵn
+    // sàng"); a plain-ASCII keyword is compared against the folded text, so "lai suat" finds "lãi suất".
+    struct Keyword {
+        QString text;
+        bool ascii;
+    };
+    auto prepare = [](const QStringList& raw) {
+        QVector<Keyword> out;
+        for (const auto& kw : raw) {
+            const QString k = vitext::clean(kw.trimmed()).toLower();
+            if (k.isEmpty())
+                continue;
+            const bool ascii = std::all_of(k.cbegin(), k.cend(), [](QChar c) { return c.unicode() < 0x80; });
+            out.append({ascii ? vitext::fold(k) : k, ascii});
+        }
+        return out;
+    };
+
+    QVector<QString> lowered, folded;
+    bool texts_ready = false;
+
     for (const auto& mon : monitors) {
         if (!mon.enabled || mon.keywords.isEmpty())
             continue;
-
-        // Build regex from keywords
-        QStringList escaped;
-        for (const auto& kw : mon.keywords) {
-            escaped << ("\\b" + QRegularExpression::escape(kw.trimmed()) + "\\b");
-        }
-        QRegularExpression re(escaped.join("|"), QRegularExpression::CaseInsensitiveOption);
-        if (!re.isValid())
+        const QVector<Keyword> keywords = prepare(mon.keywords);
+        if (keywords.isEmpty())
             continue;
 
+        if (!texts_ready) {
+            lowered.reserve(articles.size());
+            folded.reserve(articles.size());
+            for (const auto& a : articles) {
+                const QString text = a.headline + " " + a.summary;
+                lowered.append(vitext::clean(text).toLower());
+                folded.append(vitext::fold(text));
+            }
+            texts_ready = true;
+        }
+
         QVector<NewsArticle> matches;
-        for (const auto& a : articles) {
-            QString text = a.headline + " " + a.summary;
-            if (re.match(text).hasMatch())
-                matches.append(a);
+        for (int i = 0; i < articles.size(); ++i) {
+            const bool hit = std::any_of(keywords.cbegin(), keywords.cend(), [&](const Keyword& k) {
+                return vitext::has_word(k.ascii ? folded[i] : lowered[i], k.text);
+            });
+            if (hit)
+                matches.append(articles[i]);
         }
         if (!matches.isEmpty())
             result[mon.id] = matches;

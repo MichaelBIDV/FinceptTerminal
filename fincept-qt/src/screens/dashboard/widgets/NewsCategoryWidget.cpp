@@ -2,6 +2,7 @@
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/news/dialogs/NewsDetailDialog.h"
 #include "services/news/NewsService.h"
 #include "ui/theme/Theme.h"
 
@@ -34,8 +35,10 @@ NewsCategoryWidget::NewsCategoryWidget(const QJsonObject& cfg, QWidget* parent)
     list_ = new QListWidget(this);
     list_->setUniformItemSizes(false);
     list_->setWordWrap(true);
-    list_->setSelectionMode(QAbstractItemView::NoSelection);
-    list_->setFocusPolicy(Qt::NoFocus);
+    list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    list_->setFocusPolicy(Qt::StrongFocus);
+    list_->setCursor(Qt::PointingHandCursor);
+    connect(list_, &QListWidget::itemClicked, this, &NewsCategoryWidget::on_item_clicked);
     vl->addWidget(list_, 1);
 
     set_configurable(true);
@@ -93,18 +96,28 @@ void NewsCategoryWidget::hideEvent(QHideEvent* e) {
 void NewsCategoryWidget::on_articles(const QVariant& v) {
     if (!v.canConvert<QVector<fincept::services::NewsArticle>>())
         return;
-    const auto articles = v.value<QVector<fincept::services::NewsArticle>>();
+    current_articles_ = v.value<QVector<fincept::services::NewsArticle>>();
 
     list_->clear();
-    int n = std::min<int>(max_rows_, articles.size());
+    int n = std::min<int>(max_rows_, current_articles_.size());
     for (int i = 0; i < n; ++i) {
-        const auto& a = articles[i];
+        const auto& a = current_articles_[i];
         const QString time = (a.sort_ts > 0) ? QDateTime::fromSecsSinceEpoch(a.sort_ts).toString("HH:mm") : a.time;
         const QString line = QString("[%1]  %2").arg(time, a.headline);
         auto* item = new QListWidgetItem(line, list_);
+        item->setData(Qt::UserRole, i);
         item->setToolTip(a.summary.isEmpty() ? a.headline : a.summary);
     }
     set_loading(false);
+}
+
+void NewsCategoryWidget::on_item_clicked(QListWidgetItem* item) {
+    if (!item)
+        return;
+    int idx = item->data(Qt::UserRole).toInt();
+    if (idx >= 0 && idx < current_articles_.size()) {
+        NewsDetailDialog::show_article(current_articles_[idx], this);
+    }
 }
 
 QDialog* NewsCategoryWidget::make_config_dialog(QWidget* parent) {
@@ -145,15 +158,22 @@ void NewsCategoryWidget::apply_styles() {
     badge_->setStyleSheet(QString("color:%1;background:%2;border:1px solid %3;"
                                   "border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;")
                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
-    list_->setStyleSheet(QString("QListWidget{background:transparent;color:%1;font-size:10px;border:none;}"
-                                 "QListWidget::item{padding:3px 4px;border-bottom:1px solid %2;}")
-                             .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
+    list_->setStyleSheet(QString("QListWidget{background:transparent;color:%1;font-size:10px;border:none;outline:none;}"
+                                 "QListWidget::item{padding:4px 6px;border-bottom:1px solid %2;cursor:pointer;}"
+                                 "QListWidget::item:hover{background:%3;color:%4;}"
+                                 "QListWidget::item:selected{background:%5;color:%6;}")
+                             .arg(ui::colors::TEXT_PRIMARY(),
+                                  ui::colors::BORDER_DIM(),
+                                  ui::colors::BG_RAISED(),
+                                  ui::colors::CYAN(),
+                                  ui::colors::BG_SURFACE(),
+                                  ui::colors::AMBER()));
 }
 
 void NewsCategoryWidget::retranslateUi() {
     BaseWidget::retranslateUi();
     set_title(tr("NEWS — CATEGORY"));
-    hub_resubscribe(); // re-renders badge + list with current category label
+    hub_resubscribe();
 }
 
 } // namespace fincept::screens::widgets

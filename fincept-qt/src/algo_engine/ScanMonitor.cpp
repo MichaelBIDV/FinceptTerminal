@@ -9,7 +9,6 @@
 #include "services/notifications/NotificationService.h"
 #include "storage/repositories/ScanEventRepository.h"
 #include "trading/instruments/InstrumentRepository.h"
-#include "ui/notifications/NotificationService.h"
 
 #include <QDateTime>
 #include <QJsonObject>
@@ -23,7 +22,6 @@ using fincept::notifications::NotificationRequest;
 using fincept::notifications::NotificationService;
 using fincept::notifications::NotifLevel;
 using fincept::notifications::NotifTrigger;
-using fincept::ui::ToastService;
 
 ScanMonitor& ScanMonitor::instance() {
     static ScanMonitor s;
@@ -282,15 +280,19 @@ void ScanMonitor::dispatch(const ScanWatch& w, const QString& symbol, const QStr
     const QString msg = QString("%1 — %2").arg(symbol, detail);
     const QJsonObject actions = w.actions;
 
-    if (actions.value("toast").toBool(true))
-        ToastService::instance().post(ToastService::Severity::Warning, msg, "scan:" + w.id);
-
-    if (actions.value("providers").toBool(false)) {
+    // One record in the core notification system: bell, history, in-app toast and
+    // the desktop banner all come from it. "providers" only decides whether it is
+    // also forwarded to the external channels (Telegram, Slack, ...).
+    const bool to_providers = actions.value("providers").toBool(false);
+    if (actions.value("toast").toBool(true) || to_providers) {
         NotificationRequest req;
         req.title = QString("Alert: %1").arg(w.name);
         req.message = msg;
         req.level = NotifLevel::Warning;
         req.trigger = NotifTrigger::PriceAlert;
+        req.source = QStringLiteral("scan");
+        req.local_only = !to_providers;
+        req.action_screen = QStringLiteral("algo_trading");
         NotificationService::instance().send(req);
     }
 

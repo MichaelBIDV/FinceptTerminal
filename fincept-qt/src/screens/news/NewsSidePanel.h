@@ -2,6 +2,7 @@
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsMonitorService.h"
 #include "services/news/NewsNlpService.h"
+#include "services/news/NewsImpactRanker.h"
 #include "services/news/NewsService.h"
 
 #include <QEvent>
@@ -25,7 +26,10 @@ class NewsSidePanel : public QWidget {
 
     void update_stats(int feed_count, int article_count, int cluster_count, int source_count);
     void update_sentiment(int bullish, int bearish, int neutral);
-    void update_top_stories(const QVector<services::NewsArticle>& top);
+    /// Ba tin tác động mạnh nhất của MỖI thị trường, đã gom nhóm sẵn theo thứ tự
+    /// Mỹ → Việt Nam → Trung Quốc → Châu Âu. Thay cho update_top_stories() cũ, vốn chỉ lấy
+    /// năm bài mới nhất nên đầu bảng toàn tin đời sống.
+    void update_top_by_market(const QVector<services::RankedArticle>& bang);
     void update_categories(const QMap<QString, int>& counts);
     void update_monitors(const QVector<services::NewsMonitor>& monitors,
                          const QMap<QString, QVector<services::NewsArticle>>& matches);

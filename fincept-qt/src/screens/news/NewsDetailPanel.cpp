@@ -171,6 +171,25 @@ QWidget* NewsDetailPanel::build_content_view() {
     tickers_label_->setObjectName("newsDetailTickers");
     layout->addWidget(tickers_label_);
 
+    // Link row (visible link display)
+    link_row_ = new QWidget(content);
+    auto* link_layout = new QHBoxLayout(link_row_);
+    link_layout->setContentsMargins(0, 2, 0, 2);
+    link_layout->setSpacing(6);
+
+    link_title_ = new QLabel(tr("LINK:"), link_row_);
+    link_title_->setObjectName("newsDetailSubTitle");
+    link_title_->setStyleSheet(QString("color:%1; font-weight:700; font-size:10px;").arg(ui::colors::AMBER()));
+    link_layout->addWidget(link_title_);
+
+    link_label_ = new QLabel(link_row_);
+    link_label_->setObjectName("newsDetailLink");
+    link_label_->setWordWrap(true);
+    link_label_->setOpenExternalLinks(true);
+    link_label_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    link_layout->addWidget(link_label_, 1);
+    layout->addWidget(link_row_);
+
     // Action buttons — a 3-column grid so the row wraps within the fixed
     // 420px panel width instead of forcing a horizontal scrollbar.
     auto* actions = new QWidget(content);
@@ -571,6 +590,18 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     else
         tickers_label_->clear();
 
+    if (link_row_ && link_label_) {
+        if (!article.link.isEmpty()) {
+            link_label_->setText(QStringLiteral(R"(<a href="%1" style="color:%2; text-decoration:underline; font-size:11px;">%3</a>)")
+                                     .arg(article.link.toHtmlEscaped(),
+                                          ui::colors::CYAN(),
+                                          article.link.toHtmlEscaped()));
+            link_row_->show();
+        } else {
+            link_row_->hide();
+        }
+    }
+
     // Reset analysis
     analysis_section_->hide();
     analyze_btn_->setText(tr("ANALYZE"));
@@ -966,6 +997,8 @@ void NewsDetailPanel::retranslateUi() {
         entities_section_title_->setText(tr("ENTITIES"));
     if (infra_title_)
         infra_title_->setText(tr("NEARBY INFRASTRUCTURE"));
+    if (link_title_)
+        link_title_->setText(tr("LINK:"));
 
     // Always-static action buttons (tooltips + labels).
     if (open_btn_)
@@ -997,6 +1030,8 @@ void NewsDetailPanel::clear() {
     monitor_section_->hide();
     entities_section_->hide();
     infra_section_->hide();
+    if (link_row_)
+        link_row_->hide();
     analyze_timeout_->stop();
 }
 

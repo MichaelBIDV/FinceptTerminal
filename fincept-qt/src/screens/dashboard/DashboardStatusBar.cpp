@@ -4,8 +4,6 @@
 #include "screens/action_center/PendingOrdersBadge.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/widgets/NotifBell.h"
-#include "ui/widgets/NotifPanel.h"
 
 #include <QApplication>
 #include <QDateTime>
@@ -125,17 +123,10 @@ DashboardStatusBar::DashboardStatusBar(QWidget* parent) : QWidget(parent) {
     rl->addWidget(make_sep());
     ready_lbl_ = make_lbl(QString::fromUtf8("● ") + tr("READY"), "dsReady");
     rl->addWidget(ready_lbl_);
-    rl->addWidget(make_sep());
 
     // ── Pending approvals badge (hidden when none) ──────────────────────────
     pending_badge_ = new PendingOrdersBadge(this);
     rl->addWidget(pending_badge_);
-
-    // ── Notification bell ──────────────────────────────────────────────────
-    notif_bell_ = new fincept::ui::NotifBell(this);
-    rl->addWidget(notif_bell_);
-
-    connect(notif_bell_, &fincept::ui::NotifBell::bell_clicked, this, &DashboardStatusBar::toggle_notif_panel);
 
     hl->addWidget(right);
 
@@ -337,21 +328,6 @@ void DashboardStatusBar::retranslateUi() {
     }
     // mem_label_ refreshes on its own timer; immediate re-tick keeps the label fresh.
     update_memory();
-}
-
-void DashboardStatusBar::toggle_notif_panel() {
-    // Lazy-create the panel parented to the window so it floats freely
-    if (!notif_panel_) {
-        QWidget* root = window();
-        notif_panel_ = new fincept::ui::NotifPanel(root ? root : this);
-    }
-    if (notif_panel_->isVisible()) {
-        notif_panel_->hide();
-    } else {
-        notif_panel_->anchor_to(notif_bell_);
-        notif_panel_->show();
-        notif_panel_->raise();
-    }
 }
 
 } // namespace fincept::screens
