@@ -404,6 +404,19 @@ QMenu* ToolBar::build_navigate_menu() {
 
     auto* mkt = add_sub(tr("Markets & Data"));
     nav(mkt, tr("Economics"), "economics");
+    nav(mkt, tr("Định giá HHP (VN30 · VN100)"), "hhp_valuation");
+    nav(mkt, tr("Lăng Kính FFT"), "langkinh");
+    nav(mkt, tr("SGI FA — Trạm quan trắc vĩ mô"), "sgi_fa");
+    nav(mkt, tr("DEEP FA — Bàn nghiên cứu HĐCV"), "deepfa");
+    nav(mkt, tr("BERI — Hội đồng Viện NCKT BIDV"), "beri");
+    nav(mkt, tr("Chaebol Reflex, hồ sơ độ trễ mẹ–con · 32 nhóm"), "msn_reflex");
+    nav(mkt, tr("Sổ nguồn — audit & lịch cập nhật dữ liệu"), "so_nguon");
+    nav(mkt, tr("HSC Research — báo cáo theo ngày + Hội đồng"), "hsc_research");
+    nav(mkt, tr("Bloomberg Research — UBS · JPM · HSBC · Citi + Hội đồng"), "bbg_research");
+    nav(mkt, tr("HĐCV Launchpad — Chứng khoán · Vĩ mô · WiData"), "hdcv_launchpad");
+    nav(mkt, tr("Bản Đồ Chaebol & VN30 — Master Plan V21 cập nhật"), "chaebol_map");
+    nav(mkt, tr("Vùng P/E × Lãi suất · Toàn Vũ, luật P/E theo LS + kiểm định từng mã"), "toanvu_pe");
+    nav(mkt, tr("ALL-IN-ONE — mọi module cho một mã VN30/VN100"), "all_in_one");
     nav(mkt, tr("GOVT Data"), "gov_data");
     nav(mkt, tr("DBnomics"), "dbnomics");
     nav(mkt, tr("AKShare Data"), "akshare");

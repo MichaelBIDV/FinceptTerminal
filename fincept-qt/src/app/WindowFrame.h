@@ -24,6 +24,7 @@ class PushpinBar;
 class TabBar;
 class DebugOverlay;
 class QuickCommandBar;
+class NotifToast;
 } // namespace fincept::ui
 namespace fincept::chat_mode {
 class ChatModeScreen;
@@ -249,6 +250,9 @@ class WindowFrame : public QMainWindow {
                                     ///< refresh, subscription fetch, focus refresh) from
                                     ///< re-locking the terminal. Reset on lock / logout.
     AiChatBubble* chat_bubble_ = nullptr;
+    /// App-wide notification toast, a child of dock_manager_ (top-right). Only
+    /// shown while this frame is the focused, unlocked one on the dock page.
+    ui::NotifToast* notif_toast_ = nullptr;
     QTimer* user_refresh_timer_ = nullptr;
 
     // Debounced persistence of dock layout on add/replace/remove via command bar.

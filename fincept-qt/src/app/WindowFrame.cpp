@@ -82,6 +82,7 @@
 #include "screens/trade_viz/TradeVizScreen.h"
 #include "screens/watchlist/WatchlistScreen.h"
 #include "services/llm/LlmService.h"
+#include "services/notifications/NotificationService.h"
 #include "services/updater/UpdateService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "trading/instruments/InstrumentService.h"
@@ -98,6 +99,8 @@
 #include "ui/pushpins/PushpinBar.h"
 #include "ui/theme/Theme.h"
 #include "ui/widgets/EnterprisePromo.h"
+#include "ui/widgets/NotifToast.h"
+#include "ui/widgets/NotifToastPolicy.h"
 #include "ui/workspace/LayoutOpenDialog.h"
 #include "ui/workspace/LayoutSaveAsDialog.h"
 
@@ -439,6 +442,26 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
             chat_bubble_->raise();
         }
     });
+
+    // Notification toast: one per frame, floating top-right over dock_manager_
+    // (bubble pattern above; the bubble sits bottom-right). Every frame hears
+    // each record, but only the focused, unlocked frame on the dock page shows
+    // it, so N windows never stack N toasts. Being a child of the dock page it
+    // also vanishes behind the lock / auth / chat pages on its own.
+    notif_toast_ = new ui::NotifToast(dock_manager_);
+    connect(&notifications::NotificationService::instance(),
+            &notifications::NotificationService::notification_received, this,
+            [this](const notifications::NotificationRecord& rec) {
+                if (!notif_toast_ || locked_ || !stack_ || stack_->currentIndex() != 1)
+                    return;
+                if (WindowCycler::instance().focused_frame() != this)
+                    return;
+                if (!notifications::NotificationService::setting_enabled("notifications.inapp", true))
+                    return;
+                if (!ui::notif_toast_policy::is_fresh(rec, QDateTime::currentDateTime()))
+                    return;
+                notif_toast_->show_notification(rec);
+            });
 
     connect(toolbar, &ui::ToolBar::chat_mode_toggled, this, &WindowFrame::toggle_chat_mode);
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
@@ -955,7 +978,7 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
             // tab bar, status bar) before the first screen factory runs.
             // DashboardScreen construction can take 200-500ms; without this
             // the user sees a blank frame for that entire duration.
-            QTimer::singleShot(0, this, [this]() { dock_router_->navigate("dashboard"); });
+            QTimer::singleShot(0, this, [this]() { dock_router_->navigate("economics"); });
             LOG_INFO("WindowFrame", "Deferred default dashboard navigate to after first paint");
         } else if (!dock_restored) {
             LOG_INFO("WindowFrame", QString("Deferring default navigate — frame spawned with adopted uuid %1 "

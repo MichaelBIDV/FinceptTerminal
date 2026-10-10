@@ -33,6 +33,7 @@
 #include "screens/auth/PricingScreen.h"
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
+#include "screens/beri/BeriScreen.h"
 #include "screens/chat_mode/ChatModeScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
 #include "screens/common/ComingSoonScreen.h"
@@ -42,9 +43,9 @@
 #include "screens/data_mapping/DataMappingScreen.h"
 #include "screens/data_sources/DataSourcesScreen.h"
 #include "screens/dbnomics/DBnomicsScreen.h"
+#include "screens/deepfa/DeepFaScreen.h"
 #include "screens/derivatives/DerivativesScreen.h"
 #include "screens/docs/DocsScreen.h"
-#include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
@@ -53,15 +54,25 @@
 #include "screens/forum/ForumScreen.h"
 #include "screens/geopolitics/GeopoliticsScreen.h"
 #include "screens/gov_data/GovDataScreen.h"
+#include "screens/hhp_valuation/HhpValuationScreen.h"
 #include "screens/info/ContactScreen.h"
 #include "screens/info/HelpScreen.h"
 #include "screens/info/PrivacyScreen.h"
 #include "screens/info/TermsScreen.h"
 #include "screens/info/TrademarksScreen.h"
+#include "screens/langkinh/LangKinhScreen.h"
 #include "screens/ma_analytics/MAAnalyticsScreen.h"
 #include "screens/maritime/MaritimeScreen.h"
 #include "screens/markets/MarketsScreen.h"
 #include "screens/mcp_servers/McpServersScreen.h"
+#include "screens/msn_reflex/MsnReflexScreen.h"
+#include "screens/hsc_research/HscResearchScreen.h"
+#include "screens/bbg_research/BbgResearchScreen.h"
+#include "screens/hdcv_launchpad/HdcvLaunchpadScreen.h"
+#include "screens/chaebol_map/ChaebolMapScreen.h"
+#include "screens/widata/WidataScreen.h"
+#include "screens/toanvu_pe/ToanVuPeScreen.h"
+#include "screens/all_in_one/AllInOneScreen.h"
 #include "screens/news/NewsScreen.h"
 #include "screens/node_editor/NodeEditorScreen.h"
 #include "screens/notes/NotesScreen.h"
@@ -73,6 +84,8 @@
 #include "screens/report_builder/ReportBuilderScreen.h"
 #include "screens/screener/ScreenerScreen.h"
 #include "screens/settings/SettingsScreen.h"
+#include "screens/sgi_fa/SgiFaScreen.h"
+#include "screens/so_nguon/SoNguonScreen.h"
 #include "screens/support/SupportScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"
 #include "screens/trade_viz/TradeVizScreen.h"
@@ -251,7 +264,20 @@ void WindowFrame::setup_dock_screens() {
     dock_router_->register_factory("code_editor", []() { return new screens::CodeEditorScreen; });
     dock_router_->register_factory("ai_quant_lab", []() { return new screens::AIQuantLabScreen; });
     dock_router_->register_factory("quantlib", []() { return new screens::QuantLibScreen; });
-    dock_router_->register_factory("economics", []() { return new screens::EconomicsScreen; });
+    dock_router_->register_factory("economics", []() { return new screens::WidataScreen; });
+    dock_router_->register_factory("hhp_valuation", []() { return new screens::HhpValuationScreen; });
+    dock_router_->register_factory("langkinh", []() { return new screens::LangKinhScreen; });
+    dock_router_->register_factory("sgi_fa", []() { return new screens::SgiFaScreen; });
+    dock_router_->register_factory("deepfa", []() { return new screens::DeepFaScreen; });
+    dock_router_->register_factory("beri", []() { return new screens::BeriScreen; });
+    dock_router_->register_factory("msn_reflex", []() { return new screens::MsnReflexScreen; });
+    dock_router_->register_factory("so_nguon", []() { return new screens::SoNguonScreen; });
+    dock_router_->register_factory("hsc_research", []() { return new screens::HscResearchScreen; });
+    dock_router_->register_factory("bbg_research", []() { return new screens::BbgResearchScreen; });
+    dock_router_->register_factory("hdcv_launchpad", []() { return new screens::HdcvLaunchpadScreen; });
+    dock_router_->register_factory("chaebol_map", []() { return new screens::ChaebolMapScreen; });
+    dock_router_->register_factory("toanvu_pe", []() { return new screens::ToanVuPeScreen; });
+    dock_router_->register_factory("all_in_one", []() { return new screens::AllInOneScreen; });
     dock_router_->register_factory("crypto_center", []() { return new screens::CryptoCenterScreen; });
     dock_router_->register_factory("gov_data", []() { return new screens::GovDataScreen; });
     dock_router_->register_factory("dbnomics", []() { return new screens::DBnomicsScreen; });

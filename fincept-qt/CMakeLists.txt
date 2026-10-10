@@ -34,6 +34,11 @@ if(WIN32 AND CMAKE_HOST_WIN32)
 endif()
 
 project(FinceptTerminal VERSION 4.5.0 LANGUAGES C CXX)
+# macOS banners via UNUserNotificationCenter need one Objective-C++ file
+# (src/ui/notifications/MacUserNotifier.mm, THONGBAO_SPEC §4).
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
 
 # Strip C/C++ flags out of RC invocations — rc.exe only understands /D, /I, /fo.
 if(WIN32)
@@ -942,6 +947,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/ScanWatchRepository.cpp
     src/storage/repositories/ScanEventRepository.cpp
+    src/storage/repositories/NotificationRepository.cpp
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/NotebookRepository.cpp
     src/storage/repositories/ReportRepository.cpp
@@ -1319,9 +1325,13 @@ set(SERVICE_SOURCES
     src/services/news/NewsService_Classification.cpp
     src/services/news/NewsService_Feeds.cpp
     src/services/news/NewsClusterService.cpp
+    src/services/news/NewsImpactRanker.cpp
     src/services/news/NewsMonitorService.cpp
     src/services/news/NewsNlpService.cpp
     src/services/news/NewsCorrelationService.cpp
+    src/services/news/NewsViText.cpp
+    src/services/news/NewsViClassifier.cpp
+    src/services/news/NewsAlertService.cpp
     # Generalized feed monitor (reusable RSS/XML/JSON/CSV scraper engine)
     src/services/feeds/FeedParseUtil.cpp
     src/services/feeds/FeedScraper.cpp
@@ -1451,6 +1461,7 @@ set(SERVICE_SOURCES
 
     # Modular notification system — service + 15 providers
     src/services/notifications/NotificationService.cpp
+    src/services/notifications/InboxService.cpp
     src/services/notifications/providers/TelegramProvider.cpp
     src/services/notifications/providers/DiscordProvider.cpp
     src/services/notifications/providers/SlackProvider.cpp
@@ -1613,6 +1624,7 @@ set(SCREEN_SOURCES
     src/services/report_builder/ReportBuilderTemplates.cpp
     src/screens/markets/MarketsScreen.cpp
     src/screens/markets/MarketPanel.cpp
+    src/screens/markets/PriceHistoryDialog.cpp
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/dashboard/DashboardScreen.cpp
@@ -1676,6 +1688,7 @@ set(SCREEN_SOURCES
     src/screens/news/NewsFeedDelegate.cpp
     src/screens/news/NewsDetailPanel.cpp
     src/screens/news/NewsTickerStrip.cpp
+    src/screens/news/dialogs/NewsDetailDialog.cpp
     src/screens/news/dialogs/RssFeedManagerDialog.cpp
     src/screens/news/dialogs/RssFeedEditDialog.cpp
     src/screens/forum/ForumScreen.cpp
@@ -1916,6 +1929,180 @@ set(SCREEN_SOURCES
     src/screens/economics/panels/UnescoPanel.cpp
     src/screens/economics/panels/BeaPanel.cpp
     src/screens/economics/panels/FinceptMacroPanel.cpp
+    src/screens/economics/panels/FinceptMacroChartWidget.cpp
+    src/screens/economics/panels/MacroCardGrid.cpp
+
+    # Lăng Kính FFT — cấu trúc cổ đông & FFT VN30 · VN100 (tab "langkinh")
+    src/screens/langkinh/LangKinhScreen.cpp
+    src/screens/langkinh/LangKinhPanel.cpp
+    src/screens/langkinh/LkBlockView.cpp
+    src/screens/langkinh/LkCards.cpp
+    src/screens/langkinh/LkChart.cpp
+    src/screens/langkinh/LkChartLayers.cpp
+    src/screens/langkinh/LkChartUtil.cpp
+    src/screens/langkinh/LkChips.cpp
+    src/screens/langkinh/LkCotMoc.cpp
+    src/screens/langkinh/LkKpiStrip.cpp
+    src/screens/langkinh/LkLayouts.cpp
+    src/screens/langkinh/LkNumberLine.cpp
+    src/screens/langkinh/LkNumberLineCard.cpp
+    src/screens/langkinh/LkNumberLineRuler.cpp
+    src/screens/langkinh/LkPage.cpp
+    src/screens/langkinh/LkPillarBlock.cpp
+    src/screens/langkinh/LkRrgChart.cpp
+    src/screens/langkinh/LkSodo.cpp
+    src/screens/langkinh/LkStory.cpp
+    src/screens/langkinh/LkTableBlock.cpp
+    src/screens/langkinh/LkTimeline.cpp
+    src/screens/langkinh/LkWidgets.cpp
+
+    # ĐỊNH GIÁ HHP — VNINDEX · VN30 · VN100 valuation zones (tab "hhp_valuation")
+    src/screens/hhp_valuation/HhpValuationScreen.cpp
+    src/screens/hhp_valuation/HhpValuationPanel.cpp
+    src/screens/hhp_valuation/HhpChart.cpp
+    src/screens/hhp_valuation/HhpScreenerTable.cpp
+    src/screens/hhp_valuation/HhpTickerDialog.cpp
+    src/screens/hhp_valuation/HhpWeeklyWidgets.cpp
+    src/screens/hhp_valuation/HhpWeeklyScreener.cpp
+    src/screens/hhp_valuation/HhpWeeklyPage.cpp
+    # SGI FA — trạm quan trắc vĩ mô (khung Lê Chí Phúc / SGI, tab "sgi_fa")
+    src/screens/sgi_fa/SgiFaScreen.cpp
+    src/screens/sgi_fa/SgiFaPanel.cpp
+    src/screens/sgi_fa/SgiSectionsTop.cpp
+    src/screens/sgi_fa/SgiSectionsBottom.cpp
+    # DEEP FA — bàn nghiên cứu HĐCV Deep FA (memo 8 section ⚔ lớp tín hiệu sống, tab "deepfa")
+    src/screens/deepfa/DeepFaScreen.cpp
+    src/screens/deepfa/DeepFaPanel.cpp
+    src/screens/deepfa/DeepFaUniverseTable.cpp
+    src/screens/deepfa/DeepFaSectionsTop.cpp
+    src/screens/deepfa/DeepFaSectionsBottom.cpp
+    # BERI — bàn điều hành Hội đồng Cố vấn AI Viện NCKT BIDV (lịch · sổ lệch · sổ nguồn · bộ máy, tab "beri")
+    src/screens/beri/BeriScreen.cpp
+    src/screens/beri/BeriPanel.cpp
+    src/screens/beri/BeriSectionsLive.cpp
+    src/screens/beri/BeriSectionsCharter.cpp
+    # MSN MSR Reflex (tab "msn_reflex") + Sổ nguồn (tab "so_nguon") + shared vnblocks renderer
+    src/screens/vnblocks/VnBlocks.cpp
+    src/screens/msn_reflex/MsnReflexScreen.cpp
+    src/screens/msn_reflex/MsnReflexPanel.cpp
+    src/screens/so_nguon/SoNguonScreen.cpp
+    src/screens/so_nguon/SoNguonPanel.cpp
+    src/screens/hsc_research/HscResearchScreen.cpp
+    src/screens/hsc_research/HscResearchPanel.cpp
+    src/screens/bbg_research/BbgResearchScreen.cpp
+    src/screens/bbg_research/BbgResearchPanel.cpp
+    # HĐCV Launchpad (tab "hdcv_launchpad") — native clone of the web Launchpad :9000/sys/launchpad
+    src/screens/hdcv_launchpad/HdcvLaunchpadScreen.cpp
+    src/screens/hdcv_launchpad/HlpAtoms.cpp
+    src/screens/hdcv_launchpad/HlpCharts.cpp
+    src/screens/hdcv_launchpad/HlpData.cpp
+    src/screens/hdcv_launchpad/HlpDom.cpp
+    src/screens/hdcv_launchpad/HlpDomInline.cpp
+    src/screens/hdcv_launchpad/HlpDomLayout.cpp
+    src/screens/hdcv_launchpad/HlpDomPaint.cpp
+    src/screens/hdcv_launchpad/HlpDomStyle.cpp
+    src/screens/hdcv_launchpad/HlpDomTable.cpp
+    src/screens/hdcv_launchpad/HlpFmt.cpp
+    src/screens/hdcv_launchpad/HlpFontBlit.cpp
+    src/screens/hdcv_launchpad/HlpFontFallback.cpp
+    src/screens/hdcv_launchpad/HlpFontShape.cpp
+    src/screens/hdcv_launchpad/HlpFontTables.cpp
+    src/screens/hdcv_launchpad/HlpPanelsRegistry.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Ck.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Extra.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Misc.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Sgi.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Vietcap.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Vimo.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Wd.cpp
+    src/screens/hdcv_launchpad/HlpPanels_WdDetail.cpp
+    src/screens/hdcv_launchpad/HlpShell.cpp
+    src/screens/hdcv_launchpad/HlpShellBar.cpp
+    src/screens/hdcv_launchpad/HlpShellDump.cpp
+    src/screens/hdcv_launchpad/HlpShellGrid.cpp
+    src/screens/hdcv_launchpad/HlpShellSheet.cpp
+    src/screens/hdcv_launchpad/HlpTheme.cpp
+    src/screens/hdcv_launchpad/HlpView.cpp
+    # CHAEBOL MAP (tab "chaebol_map") — native clone of Master Plan V21 · Bản Đồ Chaebol & VN30
+    src/screens/chaebol_map/ChaebolMapPanel.cpp
+    src/screens/chaebol_map/ChaebolMapScreen.cpp
+    src/screens/chaebol_map/ChbDom.cpp
+    src/screens/chaebol_map/ChbFonts.cpp
+    src/screens/chaebol_map/ChbGeom.cpp
+    src/screens/chaebol_map/ChbJson.cpp
+    src/screens/chaebol_map/ChbLayout.cpp
+    src/screens/chaebol_map/ChbLayoutFlex.cpp
+    src/screens/chaebol_map/ChbLayoutGrid.cpp
+    src/screens/chaebol_map/ChbLayoutInline.cpp
+    src/screens/chaebol_map/ChbLayoutInlineBreak.cpp
+    src/screens/chaebol_map/ChbLayoutTable.cpp
+    src/screens/chaebol_map/ChbPaint.cpp
+    src/screens/chaebol_map/ChbState.cpp
+    src/screens/chaebol_map/ChbStyle.cpp
+    src/screens/chaebol_map/ChbStyleProps.cpp
+    src/screens/chaebol_map/ChbStyleValues.cpp
+    src/screens/chaebol_map/ChbSvg.cpp
+    src/screens/chaebol_map/ChbSvgParse.cpp
+    src/screens/chaebol_map/ChbSvgPath.cpp
+    src/screens/chaebol_map/ChbSvgText.cpp
+    src/screens/chaebol_map/ChbText.cpp
+    src/screens/chaebol_map/ChbView.cpp
+
+    # VĨ MÔ (MACRO): bản clone WiData Dashboard (tab "economics" -> WidataScreen; EconomicsScreen
+    # nguyên vẹn làm trang phụ), vẽ bằng QPainter. DESIGN widata_clone_spec §9.2, §16 C11
+    src/screens/widata/WdcCache.cpp
+    src/screens/widata/WdcCard.cpp
+    src/screens/widata/WdcData.cpp
+    src/screens/widata/WdcExpanded.cpp
+    src/screens/widata/WdcFonts.cpp
+    src/screens/widata/WdcGrid.cpp
+    src/screens/widata/WdcHcAxis.cpp
+    src/screens/widata/WdcHcColumn.cpp
+    src/screens/widata/WdcHcDump.cpp
+    src/screens/widata/WdcHcLayout.cpp
+    src/screens/widata/WdcHcMath.cpp
+    src/screens/widata/WdcHcPaint.cpp
+    src/screens/widata/WdcHcSeries.cpp
+    src/screens/widata/WdcHcText.cpp
+    src/screens/widata/WdcIcons.cpp
+    src/screens/widata/WdcLegend.cpp
+    src/screens/widata/WdcPaneChart.cpp
+    src/screens/widata/WdcRange.cpp
+    src/screens/widata/WdcRender.cpp
+    src/screens/widata/WdcShell.cpp
+    src/screens/widata/WdcSingle.cpp
+    src/screens/widata/WdcTooltip.cpp
+    src/screens/widata/WdcView.cpp
+    src/screens/widata/WidataScreen.cpp
+    src/screens/widata/WdcCache.h
+    src/screens/widata/WdcCard.h
+    src/screens/widata/WdcData.h
+    src/screens/widata/WdcExpanded.h
+    src/screens/widata/WdcFonts.h
+    src/screens/widata/WdcGrid.h
+    src/screens/widata/WdcHcApi.h
+    src/screens/widata/WdcHcInternal_p.h
+    src/screens/widata/WdcHcMath.h
+    src/screens/widata/WdcHcText.h
+    src/screens/widata/WdcIcons_p.h
+    src/screens/widata/WdcLegend.h
+    src/screens/widata/WdcModel.h
+    src/screens/widata/WdcPaneChart.h
+    src/screens/widata/WdcRange.h
+    src/screens/widata/WdcRender.h
+    src/screens/widata/WdcSingle.h
+    src/screens/widata/WdcTheme_p.h
+    src/screens/widata/WdcTooltip.h
+    src/screens/widata/WdcView.h
+    src/screens/widata/WidataScreen.h
+
+    # Vùng P/E × Lãi suất · Toàn Vũ (tab "toanvu_pe"; trang vnblocks/1 từ scripts/toanvu_pe.py)
+    src/screens/toanvu_pe/ToanVuPeScreen.cpp
+    src/screens/toanvu_pe/ToanVuPePanel.cpp
+    src/screens/vnblocks/VnChartsExt.cpp
+    # ALL-IN-ONE (tab "all_in_one"; lưới ô aio/1 từ scripts/all_in_one.py, khối vnblocks/1)
+    src/screens/all_in_one/AllInOneScreen.cpp
+    src/screens/all_in_one/AllInOnePanel.cpp
 
     # Polymarket / Prediction Markets
     src/screens/polymarket/PolymarketScreen.cpp
@@ -2332,6 +2519,28 @@ set_source_files_properties(
     src/screens/fno/MultiStraddleChart.cpp
     src/screens/fno/ScreenerSubTab.cpp
     src/screens/economics/EconomicsScreen.cpp
+    src/screens/langkinh/LangKinhScreen.cpp
+    src/screens/langkinh/LangKinhPanel.cpp
+    src/screens/langkinh/LkBlockView.cpp
+    src/screens/langkinh/LkCards.cpp
+    src/screens/langkinh/LkChart.cpp
+    src/screens/langkinh/LkChartLayers.cpp
+    src/screens/langkinh/LkChartUtil.cpp
+    src/screens/langkinh/LkChips.cpp
+    src/screens/langkinh/LkCotMoc.cpp
+    src/screens/langkinh/LkKpiStrip.cpp
+    src/screens/langkinh/LkLayouts.cpp
+    src/screens/langkinh/LkNumberLine.cpp
+    src/screens/langkinh/LkNumberLineCard.cpp
+    src/screens/langkinh/LkNumberLineRuler.cpp
+    src/screens/langkinh/LkPage.cpp
+    src/screens/langkinh/LkPillarBlock.cpp
+    src/screens/langkinh/LkRrgChart.cpp
+    src/screens/langkinh/LkSodo.cpp
+    src/screens/langkinh/LkStory.cpp
+    src/screens/langkinh/LkTableBlock.cpp
+    src/screens/langkinh/LkTimeline.cpp
+    src/screens/langkinh/LkWidgets.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
@@ -2379,6 +2588,7 @@ set_source_files_properties(
     src/screens/maritime/MaritimeScreen_Layout.cpp
     src/screens/maritime/MaritimeScreen_Handlers.cpp
     src/screens/markets/MarketPanel.cpp
+    src/screens/markets/PriceHistoryDialog.cpp
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketsScreen.cpp
@@ -2393,6 +2603,7 @@ set_source_files_properties(
     src/screens/news/NewsScreen.cpp
     src/screens/news/NewsSidePanel.cpp
     src/screens/news/NewsTickerStrip.cpp
+    src/screens/news/dialogs/NewsDetailDialog.cpp
     src/screens/news/dialogs/RssFeedManagerDialog.cpp
     src/screens/news/dialogs/RssFeedEditDialog.cpp
     src/screens/node_editor/NodeEditorScreen.cpp
@@ -2501,6 +2712,11 @@ set_source_files_properties(
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/ScanWatchRepository.cpp
     src/storage/repositories/ScanEventRepository.cpp
+    src/storage/repositories/NotificationRepository.cpp
+    src/services/notifications/InboxService.cpp
+    src/services/news/NewsViText.cpp
+    src/services/news/NewsViClassifier.cpp
+    src/services/news/NewsAlertService.cpp
     src/storage/repositories/WorkflowRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
@@ -2626,6 +2842,178 @@ set_source_files_properties(
     src/app/DockScreenRouter_PanelOps.cpp
     src/app/DockScreenRouter_Materialize.cpp
     src/app/TerminalShell.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# HHP valuation module: its files share helper names in anonymous namespaces — keep them
+# out of unity batches (also means adding them does not reshuffle existing batches).
+set_source_files_properties(
+    src/screens/hhp_valuation/HhpValuationScreen.cpp
+    src/screens/hhp_valuation/HhpValuationPanel.cpp
+    src/screens/hhp_valuation/HhpChart.cpp
+    src/screens/hhp_valuation/HhpScreenerTable.cpp
+    src/screens/hhp_valuation/HhpTickerDialog.cpp
+    src/screens/hhp_valuation/HhpWeeklyWidgets.cpp
+    src/screens/hhp_valuation/HhpWeeklyScreener.cpp
+    src/screens/hhp_valuation/HhpWeeklyPage.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# SGI FA module: helper names in anonymous namespaces — keep out of unity batches
+# (adding them then does not reshuffle existing batches either).
+set_source_files_properties(
+    src/screens/sgi_fa/SgiFaScreen.cpp
+    src/screens/sgi_fa/SgiFaPanel.cpp
+    src/screens/sgi_fa/SgiSectionsTop.cpp
+    src/screens/sgi_fa/SgiSectionsBottom.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# DEEP FA module: file-local helpers (dt_/db_/ut_ prefixes) in anonymous namespaces — keep out of
+# unity batches so adding them does not reshuffle existing batches either.
+set_source_files_properties(
+    src/screens/deepfa/DeepFaScreen.cpp
+    src/screens/deepfa/DeepFaPanel.cpp
+    src/screens/deepfa/DeepFaUniverseTable.cpp
+    src/screens/deepfa/DeepFaSectionsTop.cpp
+    src/screens/deepfa/DeepFaSectionsBottom.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# BERI module: file-local helpers (live_/ch_ prefixes) in anonymous namespaces — keep out of unity
+# batches so adding them does not reshuffle existing batches either.
+set_source_files_properties(
+    src/screens/beri/BeriScreen.cpp
+    src/screens/beri/BeriPanel.cpp
+    src/screens/beri/BeriSectionsLive.cpp
+    src/screens/beri/BeriSectionsCharter.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# MSN Reflex / Sổ nguồn / vnblocks: helper names in anonymous namespaces (vb_/mr_/sn_) — keep out of
+# unity batches so adding them does not reshuffle existing batches either.
+set_source_files_properties(
+    src/screens/vnblocks/VnBlocks.cpp
+    src/screens/msn_reflex/MsnReflexScreen.cpp
+    src/screens/msn_reflex/MsnReflexPanel.cpp
+    src/screens/so_nguon/SoNguonScreen.cpp
+    src/screens/so_nguon/SoNguonPanel.cpp
+    src/screens/hsc_research/HscResearchScreen.cpp
+    src/screens/hsc_research/HscResearchPanel.cpp
+    src/screens/bbg_research/BbgResearchScreen.cpp
+    src/screens/bbg_research/BbgResearchPanel.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# HĐCV Launchpad: every TU has file-local helpers in anonymous namespaces (hlp*_ prefixes) and the
+# HlpDom engine owns large static tables — keep the whole module out of unity batches.
+set_source_files_properties(
+    src/screens/hdcv_launchpad/HdcvLaunchpadScreen.cpp
+    src/screens/hdcv_launchpad/HlpAtoms.cpp
+    src/screens/hdcv_launchpad/HlpCharts.cpp
+    src/screens/hdcv_launchpad/HlpData.cpp
+    src/screens/hdcv_launchpad/HlpDom.cpp
+    src/screens/hdcv_launchpad/HlpDomInline.cpp
+    src/screens/hdcv_launchpad/HlpDomLayout.cpp
+    src/screens/hdcv_launchpad/HlpDomPaint.cpp
+    src/screens/hdcv_launchpad/HlpDomStyle.cpp
+    src/screens/hdcv_launchpad/HlpDomTable.cpp
+    src/screens/hdcv_launchpad/HlpFmt.cpp
+    src/screens/hdcv_launchpad/HlpFontBlit.cpp
+    src/screens/hdcv_launchpad/HlpFontFallback.cpp
+    src/screens/hdcv_launchpad/HlpFontShape.cpp
+    src/screens/hdcv_launchpad/HlpFontTables.cpp
+    src/screens/hdcv_launchpad/HlpPanelsRegistry.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Ck.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Extra.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Misc.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Sgi.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Vietcap.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Vimo.cpp
+    src/screens/hdcv_launchpad/HlpPanels_Wd.cpp
+    src/screens/hdcv_launchpad/HlpPanels_WdDetail.cpp
+    src/screens/hdcv_launchpad/HlpShell.cpp
+    src/screens/hdcv_launchpad/HlpShellBar.cpp
+    src/screens/hdcv_launchpad/HlpShellDump.cpp
+    src/screens/hdcv_launchpad/HlpShellGrid.cpp
+    src/screens/hdcv_launchpad/HlpShellSheet.cpp
+    src/screens/hdcv_launchpad/HlpTheme.cpp
+    src/screens/hdcv_launchpad/HlpView.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# CHAEBOL MAP: file-local helpers (chb*_ prefixes) and large static font tables in the Chb engine — keep the
+# whole module out of unity batches.
+set_source_files_properties(
+    src/screens/chaebol_map/ChaebolMapPanel.cpp
+    src/screens/chaebol_map/ChaebolMapScreen.cpp
+    src/screens/chaebol_map/ChbDom.cpp
+    src/screens/chaebol_map/ChbFonts.cpp
+    src/screens/chaebol_map/ChbGeom.cpp
+    src/screens/chaebol_map/ChbJson.cpp
+    src/screens/chaebol_map/ChbLayout.cpp
+    src/screens/chaebol_map/ChbLayoutFlex.cpp
+    src/screens/chaebol_map/ChbLayoutGrid.cpp
+    src/screens/chaebol_map/ChbLayoutInline.cpp
+    src/screens/chaebol_map/ChbLayoutInlineBreak.cpp
+    src/screens/chaebol_map/ChbLayoutTable.cpp
+    src/screens/chaebol_map/ChbPaint.cpp
+    src/screens/chaebol_map/ChbState.cpp
+    src/screens/chaebol_map/ChbStyle.cpp
+    src/screens/chaebol_map/ChbStyleProps.cpp
+    src/screens/chaebol_map/ChbStyleValues.cpp
+    src/screens/chaebol_map/ChbSvg.cpp
+    src/screens/chaebol_map/ChbSvgParse.cpp
+    src/screens/chaebol_map/ChbSvgPath.cpp
+    src/screens/chaebol_map/ChbSvgText.cpp
+    src/screens/chaebol_map/ChbText.cpp
+    src/screens/chaebol_map/ChbView.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# WIDATA clone (tab VĨ MÔ): file-local helpers (wdc*_ prefixes, anonymous namespaces) and static token
+# tables; keep the whole module out of unity batches so adding it does not reshuffle the existing batches.
+set_source_files_properties(
+    src/screens/widata/WdcCache.cpp
+    src/screens/widata/WdcCard.cpp
+    src/screens/widata/WdcData.cpp
+    src/screens/widata/WdcExpanded.cpp
+    src/screens/widata/WdcFonts.cpp
+    src/screens/widata/WdcGrid.cpp
+    src/screens/widata/WdcHcAxis.cpp
+    src/screens/widata/WdcHcColumn.cpp
+    src/screens/widata/WdcHcDump.cpp
+    src/screens/widata/WdcHcLayout.cpp
+    src/screens/widata/WdcHcMath.cpp
+    src/screens/widata/WdcHcPaint.cpp
+    src/screens/widata/WdcHcSeries.cpp
+    src/screens/widata/WdcHcText.cpp
+    src/screens/widata/WdcIcons.cpp
+    src/screens/widata/WdcLegend.cpp
+    src/screens/widata/WdcPaneChart.cpp
+    src/screens/widata/WdcRange.cpp
+    src/screens/widata/WdcRender.cpp
+    src/screens/widata/WdcShell.cpp
+    src/screens/widata/WdcSingle.cpp
+    src/screens/widata/WdcTooltip.cpp
+    src/screens/widata/WdcView.cpp
+    src/screens/widata/WidataScreen.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# Vùng P/E × Lãi suất · Toàn Vũ (tab toanvu_pe): file-local helpers carry a tvpe_ prefix; keep the module
+# out of unity batches so adding it does not reshuffle the existing batches.
+set_source_files_properties(
+    src/screens/toanvu_pe/ToanVuPeScreen.cpp
+    src/screens/toanvu_pe/ToanVuPePanel.cpp
+    src/screens/vnblocks/VnChartsExt.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+)
+
+# ALL-IN-ONE (tab all_in_one): file-local helpers carry an aio_ prefix; out of unity batches like toanvu_pe.
+set_source_files_properties(
+    src/screens/all_in_one/AllInOneScreen.cpp
+    src/screens/all_in_one/AllInOnePanel.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
 )
 
@@ -2831,6 +3219,7 @@ set_source_files_properties(
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/ScanWatchRepository.cpp
     src/storage/repositories/ScanEventRepository.cpp
+    src/storage/repositories/NotificationRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
@@ -2861,7 +3250,12 @@ if(WIN32)
     set(_FINCEPT_PLATFORM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
 elseif(APPLE)
     set(_FINCEPT_EXE_FLAGS MACOSX_BUNDLE)
-    set(_FINCEPT_PLATFORM_SOURCES "")
+    set(_FINCEPT_PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/notifications/MacUserNotifier.mm")
+    # ObjC++ with ARC; kept out of the unity batches and the C++ precompiled header.
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/ui/notifications/MacUserNotifier.mm"
+        PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
+                   SKIP_PRECOMPILE_HEADERS TRUE
+                   COMPILE_OPTIONS "-fobjc-arc")
 else()
     set(_FINCEPT_EXE_FLAGS "")
     set(_FINCEPT_PLATFORM_SOURCES "")
@@ -2943,6 +3337,7 @@ qt6_add_lupdate(FinceptTerminal
 
 # ── macOS bundle properties ───────────────────────────────────────────────────
 if(APPLE)
+    target_link_libraries(FinceptTerminal PRIVATE "-framework UserNotifications")
     set_target_properties(FinceptTerminal PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER    "com.fincept.terminal"
         MACOSX_BUNDLE_BUNDLE_NAME       "Fincept Terminal"

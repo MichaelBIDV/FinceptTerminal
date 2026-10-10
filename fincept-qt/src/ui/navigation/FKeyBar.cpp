@@ -20,7 +20,11 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     tab_layout_->setSpacing(2);
 
     tab_defs_ = {
-        {"dashboard", "DASHBOARD"},   {"markets", "MARKETS"},      {"crypto_trading", "CRYPTO"},
+        {"dashboard", "DASHBOARD"},   {"all_in_one", "ALL-IN-ONE"},   {"economics", "VĨ MÔ (MACRO)"},   {"hhp_valuation", "ĐỊNH GIÁ HHP"},
+        {"langkinh", "LĂNG KÍNH FFT"},        {"sgi_fa", "SGI FA"},        {"deepfa", "DEEP FA"},
+        {"beri", "BERI"},
+        {"msn_reflex", "CHAEBOL REFLEX"},  {"so_nguon", "SỔ NGUỒN"}, {"hsc_research", "HSC RESEARCH"}, {"bbg_research", "BBG RESEARCH"}, {"hdcv_launchpad", "HĐCV LAUNCHPAD"}, {"chaebol_map", "CHAEBOL MAP"}, {"toanvu_pe", "P/E×LS TV"},
+        {"markets", "MARKETS"},      {"crypto_trading", "CRYPTO"},
         {"equity_trading", "EQUITY"}, {"portfolio", "PORTFOLIO"},  {"news", "NEWS"},
         {"ai_chat", "AI CHAT"},       {"backtesting", "BACKTEST"}, {"algo_trading", "ALGO"},
         {"node_editor", "NODES"},     {"code_editor", "CODE"},     {"ai_quant_lab", "QUANT LAB"},
