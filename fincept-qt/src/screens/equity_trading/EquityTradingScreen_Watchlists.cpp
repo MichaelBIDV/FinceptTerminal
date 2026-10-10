@@ -33,8 +33,10 @@ void EquityTradingScreen::load_watchlists() {
     // First run anywhere (no lists in the repo) — seed one from the focused
     // broker's default_watchlist so existing behaviour is preserved.
     if (lists.isEmpty()) {
-        QString seed_name = QStringLiteral("Watchlist");
-        QStringList seed_syms;
+        // Máy này chạy LOCAL MODE, không nối môi giới nào → rơi thẳng vào nhánh mặc định.
+        // Gieo VN30 thay vì một rổ rỗng tên "Watchlist".
+        QString seed_name = QStringLiteral("VN30");
+        QStringList seed_syms = equity::DEFAULT_WATCHLIST;
         if (auto* b = trading::BrokerRegistry::instance().get(broker_id_for_focused())) {
             const auto prof = b->profile();
             if (prof.region == QLatin1String("IN")) {

@@ -17,18 +17,54 @@ enum class BottomTab { Positions, Holdings, Orders, Funds, Stats };
 
 enum class TradingMode { Paper, Live };
 
-// ── Default Watchlist (NIFTY 50 subset) ────────────────────────────────────
+// ── Danh sách mặc định ─────────────────────────────────────────────────────
+//
+// Đổi ngày 21/09/2026: ba rổ cũ là NIFTY của thị trường ẤN ĐỘ — đúng với bản gốc upstream
+// nhưng sai với chủ hệ. Rổ VN dưới đây SINH TỪ fincept.db (bảng watchlists + watchlist_stocks,
+// hai rổ 'VN30' và 'VN100' do lớp dữ liệu nạp), nên nếu rổ trong DB đổi thì sinh lại tệp này
+// thay vì sửa tay. Mã để TRẦN, không hậu tố: yfinance_data.py đã định tuyến mã VN sang kho
+// vnstock (giá bảng HOSE/HNX/UPCOM), hậu tố .NS/.BO chỉ dành cho sàn Ấn.
 
 inline const QStringList DEFAULT_WATCHLIST = {
-    "HDFCBANK", "ICICIBANK", "SBIN",     "KOTAKBANK", "AXISBANK",   "TCS",        "INFY",
-    "WIPRO",    "HCLTECH",   "RELIANCE", "TATASTEEL", "MARUTI",     "BAJFINANCE", "HINDUNILVR",
-    "ITC",      "SUNPHARMA", "DRREDDY",  "LT",        "BHARTIARTL", "TITAN",
+    "ACB", "BCM", "BID", "CTG", "FPT", "GAS", "GVR",
+    "HDB", "HPG", "LPB", "MBB", "MSN", "MWG", "PLX",
+    "POW", "SAB", "SHB", "SSB", "SSI", "STB", "TCB",
+    "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM",
+    "VPB", "VRE",
 };
 
+inline const QStringList VN100_WATCHLIST = {
+    "ACB", "ANV", "BCM", "BID", "BMP", "BSI", "BSR",
+    "BVH", "BWE", "CII", "CMG", "CTD", "CTG", "CTR",
+    "CTS", "DBC", "DCM", "DGC", "DGW", "DIG", "DPM",
+    "DSE", "DXG", "DXS", "EIB", "EVF", "FPT", "FRT",
+    "FTS", "GAS", "GEE", "GEX", "GMD", "GVR", "HAG",
+    "HCM", "HDB", "HDC", "HDG", "HHV", "HPG", "HSG",
+    "HT1", "IMP", "KBC", "KDC", "KDH", "KOS", "LPB",
+    "MBB", "MSB", "MSN", "MWG", "NAB", "NKG", "NLG",
+    "NT2", "NVL", "OCB", "PAN", "PC1", "PDR", "PHR",
+    "PLX", "PNJ", "POW", "PVD", "PVT", "REE", "SAB",
+    "SBT", "SCS", "SHB", "SIP", "SJS", "SSB", "SSI",
+    "STB", "SZC", "TCB", "TCH", "TPB", "VCB", "VCG",
+    "VCI", "VGC", "VHC", "VHM", "VIB", "VIC", "VIX",
+    "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VRE",
+    "VSC", "VTP",
+};
+
+// Mã trọng yếu của Mỹ: hợp của DJ30 và nhóm vốn hoá lớn NASDAQ/S&P 500.
+// Thành phần chỉ số có thay đổi theo kỳ cơ cấu — đây là rổ THEO DÕI, không phải bản sao
+// chính thức của chỉ số nào.
 inline const QStringList US_WATCHLIST = {
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "JNJ",
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO",
+    "TSLA", "JPM", "V", "UNH", "XOM", "JNJ", "PG",
+    "HD", "MA", "COST", "WMT", "MRK", "CVX", "KO",
+    "MCD", "CSCO", "IBM", "GS", "CAT", "BA", "AXP",
+    "DIS", "AMGN", "HON", "CRM", "VZ", "MMM", "TRV",
+    "SHW",
 };
 
+// Giữ lại cho môi giới Ấn Độ (EquityTradingScreen_Watchlists.cpp chỉ gieo rổ này khi
+// profile().region == "IN"). Không còn là mặc định của máy này.
 // Full NIFTY 50 constituents (NSE) — seeded as the default watchlist for Indian
 // brokers (profile region == "IN"). Plain symbols; each broker's resolver maps them.
 inline const QStringList NIFTY50_WATCHLIST = {

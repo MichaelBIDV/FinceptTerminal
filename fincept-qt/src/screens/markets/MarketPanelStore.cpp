@@ -137,9 +137,15 @@ QVector<MarketPanelConfig> MarketPanelStore::build_defaults() {
         panels.append(MarketPanelConfig::make(reg.region, syms, true));
     }
 
-    // Distribute panels evenly across 3 columns
-    for (int i = 0; i < panels.size(); ++i)
-        panels[i].column_index = i % 3;
+    // Chín bảng gốc giữ nguyên lưới 3×3 như trước; bảng Vietnam đứng MỘT MÌNH ở cột thứ tư để
+    // có đủ chiều cao cho 32 dòng (xem MarketDataService::default_regional_markets).
+    int k = 0;
+    for (auto& p : panels) {
+        if (p.title == QStringLiteral("Vietnam"))
+            p.column_index = 3;
+        else
+            p.column_index = (k++) % 3;
+    }
 
     return panels;
 }

@@ -20,6 +20,22 @@ struct TopicPolicy {
     /// silently-failing producer from pinning a topic forever.
     int refresh_timeout_ms = 30'000;
 
+    /// Exponential backoff for topics whose refreshes keep failing. The
+    /// scheduler's retry gate is otherwise just `min_interval_ms`, and a
+    /// topic that has never published counts as TTL-expired on every tick —
+    /// so a permanently dead topic (e.g. a delisted symbol) gets re-requested
+    /// every `min_interval_ms` forever.
+    ///
+    /// When non-zero: the first failure retries on the normal cadence (a
+    /// one-off transient failure behaves exactly as before); from the second
+    /// consecutive failure on, the next scheduled retry waits
+    /// `max(min_interval_ms, 1 s) * 2^(failures-1)`, capped at this value. Any
+    /// successful publish resets the count. `request(force=true)` bypasses
+    /// the backoff, as it bypasses `min_interval_ms`.
+    ///
+    /// Default 0 = disabled: retries stay on the `min_interval_ms` cadence.
+    int max_error_backoff_ms = 0;
+
     /// If true, the scheduler never touches this topic — producers are
     /// expected to push updates as they arrive (e.g. WebSocket feeds).
     /// `ttl_ms`, `min_interval_ms`, and `refresh_timeout_ms` are ignored.

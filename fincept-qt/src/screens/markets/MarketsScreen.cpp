@@ -1,5 +1,6 @@
 #include "screens/markets/MarketsScreen.h"
 
+#include "core/logging/Logger.h"
 #include "screens/markets/MarketPanelEditor.h"
 #include "screens/markets/MarketPanelStore.h"
 #include "services/markets/MarketDataService.h"
@@ -21,7 +22,11 @@
 #include <QShowEvent>
 #include <QSplitter>
 #include <QTimeZone>
+#include <QTimer>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <numeric>
 #include <QtConcurrent/QtConcurrent>
 
 namespace fincept::screens {
@@ -230,12 +235,41 @@ void MarketsScreen::restore_splitter_state() {
     // Restore only the horizontal splitter (column widths).
     // Vertical (row heights) are set to equal in build_splitter_layout()
     // and must not be overridden by stale saved state.
-    if (sep < 0) {
+    if (sep < 0)
         h_splitter_->restoreState(QByteArray::fromBase64(saved.toLatin1()));
+    else
+        h_splitter_->restoreState(QByteArray::fromBase64(saved.left(sep).toLatin1()));
+
+    // Trạng thái đã lưu có thể đến từ bố cục CŨ ít cột hơn (3 cột trước ngày 21/09/2026), hoặc
+    // đã bị lưu lại SAU một lần khôi phục hỏng — ngày 22/09 nó mang (1000,1000,1000,180): cột
+    // VIỆT NAM còn 5,7% bề ngang, chỉ đủ hiện mã và giá. Kiểm ngay ở đây thì vô ích vì Qt CHƯA bố
+    // trí xong và sizes() chưa phải pixel thật, nên hoãn sang vòng sự kiện kế tiếp.
+    QTimer::singleShot(0, this, [this]() { fix_column_widths(0); });
+}
+
+void MarketsScreen::fix_column_widths(int lan) {
+    if (!h_splitter_)
+        return;
+    const QList<int> sz = h_splitter_->sizes();
+    const int tong = std::accumulate(sz.begin(), sz.end(), 0);
+    if (tong <= 0) {
+        // Chưa có hình học (màn đang ẩn) — thử lại vài lần rồi thôi, không lặp vô hạn.
+        if (lan < 10)
+            QTimer::singleShot(50, this, [this, lan]() { fix_column_widths(lan + 1); });
         return;
     }
-    h_splitter_->restoreState(QByteArray::fromBase64(saved.left(sep).toLatin1()));
+    // Cột hẹp hơn 12% bề ngang thì bảng trong đó không đọc được nữa — coi như bố cục hỏng.
+    const bool lech = sz.size() != kNumColumns ||
+                      std::any_of(sz.begin(), sz.end(), [tong](int w) { return w < tong * 12 / 100; });
+    if (!lech)
+        return;
+    QList<int> deu;
+    for (int i = 0; i < kNumColumns; ++i)
+        deu << tong / kNumColumns;
+    h_splitter_->setSizes(deu);
+    LOG_INFO("Markets", QString("Chia lại độ rộng %1 cột (trạng thái lưu có cột quá hẹp)").arg(kNumColumns));
 }
+
 
 // ---------------------------------------------------------------------------
 // Panel management

@@ -1,4 +1,5 @@
 #include "screens/markets/MarketPanel.h"
+#include "screens/markets/PriceHistoryDialog.h"
 
 #include "core/events/EventBus.h"
 #include "datahub/DataHub.h"
@@ -113,6 +114,11 @@ void MarketPanel::build_ui() {
 
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(table_, &QTableWidget::customContextMenuRequested, this, &MarketPanel::show_row_context_menu);
+
+    // Bấm một dòng → mở biểu đồ lịch sử của chính mã đó. Bảng vẫn NoSelection nên không có ô
+    // nào bị tô chọn; con trỏ bàn tay cho biết dòng bấm được.
+    table_->viewport()->setCursor(Qt::PointingHandCursor);
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) { open_chart_for_row(row); });
 
     table_->setVisible(false); // hidden until first data arrives
     bl->addWidget(table_);
@@ -684,6 +690,9 @@ void MarketPanel::show_row_context_menu(const QPoint& pos) {
     };
 
     QMenu menu(this);
+    QAction* chart_act = menu.addAction(tr("Mở biểu đồ"));
+    connect(chart_act, &QAction::triggered, this, [this, it]() { open_chart_for_row(it->row()); });
+    menu.addSeparator();
     QAction* copy_act = menu.addAction(tr("Copy Symbol"));
     connect(copy_act, &QAction::triggered, this, [it, ticker_at]() {
         const QString t = ticker_at(it->row());
@@ -703,6 +712,20 @@ void MarketPanel::show_row_context_menu(const QPoint& pos) {
         fincept::EventBus::instance().publish("nav.switch_screen", {{"screen_id", QString("backtesting")}});
     });
     menu.exec(table_->viewport()->mapToGlobal(pos));
+}
+
+void MarketPanel::open_chart_for_row(int row) {
+    auto* sym_item = table_->item(row, 0);
+    if (!sym_item)
+        return;
+    // Cột 0 hiện TÊN; mã thô nằm ở UserRole (xem populate()).
+    const QString ticker = sym_item->data(Qt::UserRole).toString();
+    const QString sym = ticker.isEmpty() ? sym_item->text() : ticker;
+    if (sym.isEmpty())
+        return;
+    auto* dlg = new PriceHistoryDialog(sym, sym_item->text(), window());
+    dlg->show();
+    dlg->raise();
 }
 
 // ---------------------------------------------------------------------------

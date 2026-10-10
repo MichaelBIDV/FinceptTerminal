@@ -1,3 +1,6 @@
+#include <QDesktopServices>
+#include <QUrl>
+#include <QDir>
 #include "screens/dashboard/DashboardToolBar.h"
 
 #include "ui/theme/Theme.h"
@@ -136,6 +139,18 @@ DashboardToolBar::DashboardToolBar(QWidget* parent) : QWidget(parent) {
     reset_btn_->setToolTip(tr("Replace the current layout with a template"));
     connect(reset_btn_, &QPushButton::clicked, this, &DashboardToolBar::reset_layout_clicked);
     rl->addWidget(reset_btn_);
+
+    auto* macro_dash_btn = new QPushButton(tr("📊 MACRO DASHBOARD"), right);
+    macro_dash_btn->setFixedHeight(20);
+    macro_dash_btn->setCursor(Qt::PointingHandCursor);
+    macro_dash_btn->setStyleSheet("QPushButton{background:#d97706;color:#ffffff;font-weight:bold;padding:0 8px;border-radius:3px;border:none;}"
+                                  "QPushButton:hover{background:#f59e0b;color:#ffffff;}");
+    macro_dash_btn->setToolTip(tr("Mở Toàn Cảnh Dashboard Vĩ Mô 4 Nền Kinh Tế (Chart & 56 Năm)"));
+    QObject::connect(macro_dash_btn, &QPushButton::clicked, []() {
+        QString p = QDir::homePath() + "/Downloads/fincept_macro_dashboard.html";
+        QDesktopServices::openUrl(QUrl::fromLocalFile(p));
+    });
+    rl->addWidget(macro_dash_btn);
 
     // Accessible names + an explicit tab order: the terminal shipped with zero
     // of either, so the toolbar was unreachable/unannounced by keyboard.

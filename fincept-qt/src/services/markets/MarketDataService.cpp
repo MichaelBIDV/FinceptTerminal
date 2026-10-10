@@ -314,10 +314,21 @@ void MarketDataService::ensure_registered_with_hub() {
     // them and the fan-out cost (table re-paints, format computations) is
     // pure waste. The cached value still updates so the next show reads
     // a fresh price from peek().
+    //
+    // max_error_backoff_ms (all three families): a symbol Yahoo no longer
+    // serves (delisted / renamed — it comes back "missing from batch
+    // response") never publishes, so without backoff the scheduler re-asked
+    // for it alone every min_interval — one extra batch_all on the serial
+    // PythonWorker every 2–3 s, forever. Now: 2 s, 4 s, 8 s … capped at 10 min.
+    // User refresh (F5 / auto-refresh / panel reconfig) is force=true and
+    // still includes it, batched with the live symbols.
+    constexpr int kMarketErrorBackoffCapMs = 10 * 60'000;
+
     datahub::TopicPolicy quote_p;
     quote_p.ttl_ms = 30'000;
     quote_p.min_interval_ms = 2'000;
     quote_p.pause_when_inactive = true;
+    quote_p.max_error_backoff_ms = kMarketErrorBackoffCapMs;
     hub.set_policy_pattern(QStringLiteral("market:quote:*"), quote_p);
 
     // Sparklines: 5-day hourly data, changes slowly — cache 10 minutes,
@@ -332,6 +343,7 @@ void MarketDataService::ensure_registered_with_hub() {
     spark_p.ttl_ms = 10 * 60'000;
     spark_p.min_interval_ms = 30'000;
     spark_p.pause_when_inactive = true;
+    spark_p.max_error_backoff_ms = kMarketErrorBackoffCapMs;
     hub.set_policy_pattern(QStringLiteral("market:sparkline:*"), spark_p);
 
     // History: OHLCV series. One-shot per chart; policies are conservative to
@@ -341,6 +353,7 @@ void MarketDataService::ensure_registered_with_hub() {
     datahub::TopicPolicy hist_p;
     hist_p.ttl_ms = 30 * 60'000;
     hist_p.min_interval_ms = 60'000;
+    hist_p.max_error_backoff_ms = kMarketErrorBackoffCapMs;
     hub.set_policy_pattern(QStringLiteral("market:history:*"), hist_p);
 
     hub_registered_ = true;
@@ -690,17 +703,61 @@ QVector<MarketCategory> MarketDataService::default_global_markets() {
           "GBPJPY=X", "USDCNY=X", "USDINR=X"}},
         {"Commodities",
          {"GC=F", "SI=F", "PL=F", "PA=F", "HG=F", "CL=F", "BZ=F", "NG=F", "RB=F", "HO=F", "ZC=F", "ZW=F", "ZS=F",
-          "KC=F", "CT=F", "SB=F", "CC=F", "LBS=F"}},
-        {"Bonds", {"^TNX", "^TYX", "^IRX", "^FVX", "TLT", "IEF", "SHY", "BND", "AGG", "LQD", "HYG", "JNK"}},
+          "KC=F", "CT=F", "SB=F", "CC=F", "LBR=F"}},
+        // Lợi suất TPCP Việt Nam (VNGB…) đứng NGAY SAU lợi suất Mỹ: bảng chỉ hiện chừng 9 dòng đầu
+        // (số dòng co theo chiều cao ô), nên để cuối danh sách là chúng không bao giờ lộ ra.
+        // Nguồn: đường cong HNX qua _System/fincept_bridge/goi_tpcp.py — xem yfinance_data._tpcp_*.
+        {"Bonds", {"^TNX", "^FVX", "^TYX", "^IRX", "VNGB1Y", "VNGB5Y", "VNGB10Y", "VNGB15Y", "TLT", "IEF",
+                   "SHY", "BND", "AGG", "LQD", "HYG", "JNK"}},
         {"ETFs", {"SPY", "QQQ", "DIA", "EEM", "GLD", "XLK", "XLE", "XLF", "XLV", "VNQ", "IWM", "VTI"}},
         {"Cryptocurrencies",
          {"BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "LINK-USD", "DOT-USD",
-          "AVAX-USD", "UNI-USD", "ATOM-USD"}},
+          "AVAX-USD", "UNI7083-USD", "ATOM-USD"}},
     };
 }
 
 QVector<RegionalMarket> MarketDataService::default_regional_markets() {
     return {
+        // VIỆT NAM: chỉ số + đủ 30 mã VN30 (rổ ở watchlist VN30 của app ngày 21/09/2026 — VN30 tái cơ
+        // cấu nửa năm một lần, rổ đổi thì sửa ở đây). Mã dạng trần vì yfinance_data._vn_route tự đưa
+        // chúng sang kho vnstock/VNDirect; "^VNINDEX"/"^VN30" là cách nhánh VN nhận chỉ số.
+        // MarketPanelStore::build_defaults() đặt bảng này vào CỘT RIÊNG thứ tư để đủ chiều cao cho
+        // 32 dòng — nhét vào ô một phần ba chiều cao thì chỉ hiện ~11 dòng, cắt mất hai phần ba rổ.
+        {"Vietnam",
+         {
+             {"^VNINDEX", "VN-Index"},
+             {"^VN30", "VN30-Index"},
+             {"ACB", "ACB"},
+             {"BCM", "BCM"},
+             {"BID", "BID"},
+             {"CTG", "CTG"},
+             {"FPT", "FPT"},
+             {"GAS", "GAS"},
+             {"GVR", "GVR"},
+             {"HDB", "HDB"},
+             {"HPG", "HPG"},
+             {"LPB", "LPB"},
+             {"MBB", "MBB"},
+             {"MSN", "MSN"},
+             {"MWG", "MWG"},
+             {"PLX", "PLX"},
+             {"POW", "POW"},
+             {"SAB", "SAB"},
+             {"SHB", "SHB"},
+             {"SSB", "SSB"},
+             {"SSI", "SSI"},
+             {"STB", "STB"},
+             {"TCB", "TCB"},
+             {"TPB", "TPB"},
+             {"VCB", "VCB"},
+             {"VHM", "VHM"},
+             {"VIB", "VIB"},
+             {"VIC", "VIC"},
+             {"VJC", "VJC"},
+             {"VNM", "VNM"},
+             {"VPB", "VPB"},
+             {"VRE", "VRE"},
+         }},
         {"India",
          {
              {"RELIANCE.NS", "Reliance Industries"},

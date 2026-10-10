@@ -2,6 +2,12 @@
 YFinance Data Fetcher
 Fetches real-time stock quotes and historical data using yfinance
 Returns JSON output for Qt/C++ integration
+
+VN stocks use VNDirect dchart API as primary source (free, accurate, no rate
+limit).  yfinance is the fallback for international symbols.
+
+Mã VN (17/09/2026): đọc kho vnstock cục bộ (SQLite, chỉ đọc) trước, DCHART sau;
+không bao giờ gửi mã VN trần sang yfinance. Xem khối "Kho vnstock cục bộ".
 """
 
 import os
@@ -73,9 +79,819 @@ def _int(value, default=None):
         return default
 
 
+# ---------------------------------------------------------------------------
+# VNDirect dchart API — primary source for Vietnamese equities
+# ---------------------------------------------------------------------------
+import ssl as _ssl
+import urllib.request as _urllib_req
+import time as _time
+
+_VND_CTX = _ssl.create_default_context()
+_VND_CTX.check_hostname = False
+_VND_CTX.verify_mode = _ssl.CERT_NONE
+
+# All HOSE / HNX / UPCOM symbols are bare upper-case letters (no dots).
+# Known VN100 tickers — expanded from the watchlist. This set is used to
+# fast-detect Vietnamese symbols so we route them to VNDirect instead of
+# yfinance (where bare "ACB" resolves to Aurora Cannabis on NYSE).
+_VN_TICKERS = {
+    "ACB","ANV","BCM","BID","BMP","BSI","BSR","BVH","BWE","CII",
+    "CMG","CTD","CTG","CTR","CTS","DBC","DCM","DGC","DGW","DIG",
+    "DPM","DSE","DXG","DXS","EIB","EVF","FPT","FRT","FTS","GAS",
+    "GEE","GEX","GMD","GVR","HAG","HCM","HDB","HDC","HDG","HHV",
+    "HPG","HSG","HT1","IMP","KBC","KDC","KDH","KOS","LPB","MBB",
+    "MSB","MSN","MWG","NAB","NKG","NLG","NT2","NVL","OCB","PAN",
+    "PC1","PDR","PHR","PLX","PNJ","POW","PPC","PVD","PVS","PVT",
+    "REE","SAB","SBT","SCS","SHB","SIP","SJS","SSB","SSI","STB",
+    "SZC","TCB","TCH","TMP","TPB","VCB","VCG","VCI","VGC","VHC",
+    "VHM","VIB","VIC","VIX","VJC","VND","VNM","VOS","VPB","VPI",
+    "VPL","VRE","VSC","VSH","VTP",
+    # Bổ sung 17/09/2026 — nằm trong danh mục/watchlist HĐCV nhưng thiếu ở bản gốc.
+    # Đều ngoài HOSE (ACV/IDC UPCoM, HUT HNX, KSV UPCoM) nhưng DCHART vẫn trả dữ liệu:
+    # đã kiểm ACV 39,4 · HUT 12,7 · IDC 31,7 · KSV 101,3 (17/09).
+    # Nhãn sàn: lấy từ kho (bảng ma) khi có; không có kho thì vẫn là "HOSE".
+    "ACV","HUT","IDC","KSV",
+}
+
+
+def _is_vn_symbol(sym: str) -> bool:
+    """Return True if the symbol is Vietnamese (xem _vn_route: tập cứng ∪ kho, .VN, chỉ số).
+
+    Không dùng heuristic "2-4 chữ hoa" — 123 mã VN trùng mã Mỹ (ACB, MCH, VNM…).
+    """
+    return _vn_route(sym) is not None
+
+
+def _vndirect_fetch_one_quote(sym, ts_from, ts_to, mult=1000, exchange="HOSE"):
+    """Fetch a single VN symbol quote. Returns (quote_dict, None) or (None, sym).
+
+    mult: DCHART trả cổ phiếu theo NGHÌN đồng (×1000) nhưng chỉ số theo ĐIỂM (×1).
+    """
+    try:
+        url = (f"https://dchart-api.vndirect.com.vn/dchart/history"
+               f"?resolution=D&symbol={sym}&from={ts_from}&to={ts_to}")
+        req = _urllib_req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _urllib_req.urlopen(req, timeout=10, context=_VND_CTX) as resp:
+            data = json.loads(resp.read())
+        if not data.get("t") or len(data["t"]) == 0:
+            return None, sym
+        close = data["c"][-1] * mult
+        prev = data["c"][-2] * mult if len(data["c"]) >= 2 else close
+        change = close - prev
+        change_pct = (change / prev * 100) if prev else 0
+        vol = data["v"][-1] if "v" in data and data["v"] else 0
+        high = data["h"][-1] * mult if "h" in data and data["h"] else None
+        low = data["l"][-1] * mult if "l" in data and data["l"] else None
+        opn = data["o"][-1] * mult if "o" in data and data["o"] else None
+        return {
+            "symbol": sym,
+            "price": round(close, 2),
+            "change": round(change, 2),
+            "change_percent": round(change_pct, 2),
+            "volume": int(vol),
+            "high": round(high, 2) if high else None,
+            "low": round(low, 2) if low else None,
+            "open": round(opn, 2) if opn else None,
+            "previous_close": round(prev, 2),
+            "timestamp": int(datetime.now().timestamp()),
+            "exchange": exchange,
+        }, None
+    except Exception:
+        return None, sym
+
+
+def _vndirect_batch_quotes(symbols):
+    """Fetch quotes for *Vietnamese* symbols via VNDirect dchart API.
+    Uses concurrent requests (10 threads) for ~3-4x speedup.
+    Returns (list_of_quote_dicts, list_of_failed_symbols).
+
+    `symbol` trả về (và mã trong danh sách lỗi) là CHUỖI GỐC app gửi ('ACB.VN',
+    '^VNINDEX'): hub khớp theo topic market:quote:<chuỗi gốc>.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    ts_to = int(_time.time())
+    ts_from = ts_to - 7 * 86400
+    results = []
+    failed = []
+    # Định tuyến + sàn đọc ở luồng chính (không đụng SQLite trong luồng phụ);
+    # 'ACB' và 'ACB.VN' dùng chung một request.
+    jobs = {}
+    for sym in symbols:
+        bare, kind, mult = _vn_route(sym) or (sym, "stock", 1000)
+        jobs.setdefault(bare, (mult, _vn_san(bare, kind), []))[2].append(sym)
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futs = {pool.submit(_vndirect_fetch_one_quote, bare, ts_from, ts_to, job[0], job[1]): bare
+                for bare, job in jobs.items()}
+        for fut in as_completed(futs):
+            quote, fail_sym = fut.result()
+            origs = jobs[futs[fut]][2]
+            if quote:
+                results.extend(dict(quote, symbol=o) for o in origs)
+            if fail_sym:
+                failed.extend(origs)
+    return results, failed
+
+
+def _vndirect_fetch_one_sparkline(sym, ts_from, ts_to, mult=1000):
+    """Fetch sparkline for a single VN symbol. Returns (sym, closes) or (sym, None)."""
+    try:
+        url = (f"https://dchart-api.vndirect.com.vn/dchart/history"
+               f"?resolution=60&symbol={sym}&from={ts_from}&to={ts_to}")
+        req = _urllib_req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _urllib_req.urlopen(req, timeout=10, context=_VND_CTX) as resp:
+            data = json.loads(resp.read())
+        if not data.get("c") or len(data["c"]) == 0:
+            return sym, None
+        closes = [round(v * mult, 2) for v in data["c"]]
+        return sym, closes
+    except Exception:
+        return sym, None
+
+
+def _vndirect_batch_sparklines(symbols, period="5d"):
+    """Fetch sparkline (close series) for Vietnamese symbols via VNDirect.
+    Uses concurrent requests (10 threads) for ~3-4x speedup.
+    Returns (dict {sym: [closes]}, list_of_failed_symbols) — khoá là chuỗi gốc."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    ts_to = int(_time.time())
+    days = 7 if period in ("5d", "1wk") else 31
+    ts_from = ts_to - days * 86400
+    result = {}
+    failed = []
+    jobs = {}
+    for sym in symbols:
+        bare, _kind, mult = _vn_route(sym) or (sym, "stock", 1000)
+        jobs.setdefault(bare, (mult, []))[1].append(sym)
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futs = {pool.submit(_vndirect_fetch_one_sparkline, bare, ts_from, ts_to, job[0]): bare
+                for bare, job in jobs.items()}
+        for fut in as_completed(futs):
+            bare, closes = fut.result()
+            origs = jobs[bare][1]
+            if closes:
+                result.update((o, closes) for o in origs)
+            else:
+                failed.extend(origs)
+    return result, failed
+
+
+# ---------------------------------------------------------------------------
+# Kho vnstock cục bộ — nguồn chính cho mã VN (hợp đồng: fincept_bridge/SPEC_VNSTOCK.md)
+# ---------------------------------------------------------------------------
+# - Chỉ đọc (mode=ro, timeout 0.5 s), mở-đọc-đóng mỗi truy vấn: daemon xử lý TUẦN TỰ,
+#   một lần chờ khoá là chặn mọi quote/chart xếp sau (watchdog 90 s, handshake 15 s).
+# - Giá cổ phiếu trong kho đã là ĐỒNG, chỉ số là ĐIỂM → đọc kho KHÔNG nhân hệ số.
+#   Chỉ DCHART (nghìn đồng) mới cần `mult`.
+# - Kho thiếu/khoá/hỏng → coi như không có, lui DCHART. Mã VN không bao giờ rơi xuống
+#   yfinance mã trần ("ACB" trên Yahoo là Aurora Cannabis).
+# - Chỉ thư viện chuẩn, import nhẹ: SYNC của provision chỉ chép đúng tệp này.
+import sqlite3 as _sqlite3
+from urllib.parse import quote as _url_quote
+from datetime import date as _date, timedelta as _timedelta, timezone as _timezone
+
+_VN_STORE_DEFAULT = os.path.expanduser(
+    "~/SECOND BRAIN-OBSIDIAN/_System/fincept_bridge/vnstore/vn_store.db")
+_VN_STATE_DEFAULT = os.path.expanduser(
+    "~/SECOND BRAIN-OBSIDIAN/_System/fincept_bridge/state")
+_ICT = _timezone(_timedelta(hours=7))
+# Chỉ số: DCHART trả ĐIỂM → không bao giờ được lẫn vào _VN_TICKERS (×1000).
+_VN_INDICES = {"VNINDEX", "VN30", "HNXINDEX", "UPCOMINDEX"}
+_VN_INDEX_NAMES = {"VNINDEX": "VN-Index", "VN30": "VN30-Index",
+                   "HNXINDEX": "HNX-Index", "UPCOMINDEX": "UPCoM-Index"}
+# Mã VN trùng mã nằm sẵn trong cấu hình mặc định của C++ (AGG = iShares ở panel Bonds):
+# dạng trần giữ nghĩa Mỹ, muốn An Gia thì gõ "AGG.VN".
+_VN_LOAI_TRU = {"AGG"}
+_VN_SAN = {"HOSE", "HNX", "UPCOM"}
+_VN_BUSY_S = 5.0       # kho khoá/hỏng → bỏ qua kho chừng này giây (khỏi chờ timeout lặp lại)
+_VN_STALE_DAYS = 5     # nến cuối cũ hơn mức này → hỏi DCHART (collector có thể đã chết)
+_VN_PERIOD_NGAY = {"1d": 1, "5d": 7, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366,
+                   "2y": 731, "5y": 1827, "10y": 3653}
+# yfinance hiểu period '1d'/'5d' là số PHIÊN; theo ngày lịch thì sáng thứ Hai sẽ rỗng.
+_VN_PERIOD_PHIEN = {"1d": 1, "5d": 5}
+_VN_DCHART_RES = {"1m": "1", "2m": "1", "5m": "5", "15m": "15", "30m": "30",
+                  "60m": "60", "90m": "60", "1h": "60"}
+_VN_RATIO_KEYS = ("peRatio", "forwardPE", "priceToBook", "priceToSales", "pegRatio",
+                  "debtToEquity", "returnOnEquity", "returnOnAssets", "profitMargin",
+                  "operatingMargin", "grossMargin", "currentRatio", "quickRatio",
+                  "dividendYield", "revenuePerShare", "bookValuePerShare",
+                  "freeCashFlowPerShare")
+_VN_NGUON_RE = re.compile(r"\s—\s([^—·]+?)\s·\s[A-Z0-9-]+\s*$")
+_vn_uni = {"key": None, "ok": True, "stock": frozenset(), "ma": {}}
+_vn_busy = [0.0]
+
+
+def _vn_store_path():
+    return os.environ.get("FINCEPT_VN_STORE") or _VN_STORE_DEFAULT
+
+
+def _vn_conn():
+    """Kết nối chỉ đọc, hoặc None khi chưa có kho. URI phải percent-encode (đường có dấu cách)."""
+    p = _vn_store_path()
+    if not os.path.isfile(p):
+        return None
+    try:
+        return _sqlite3.connect("file:" + _url_quote(p) + "?mode=ro", uri=True, timeout=0.5)
+    except _sqlite3.Error:
+        return None
+
+
+def _vn_query(sql, args=()):
+    """Một truy vấn ngắn: mở → đọc hết → đóng (không giữ snapshot/khoá giữa các request).
+
+    Khoá/hỏng/chưa có bảng → None, và tạm ngắt kho vài giây để một request nhiều truy vấn
+    không phải chờ timeout nhiều lần.
+    """
+    if _time.monotonic() < _vn_busy[0]:
+        return None
+    con = _vn_conn()
+    if con is None:
+        return None
+    try:
+        return con.execute(sql, args).fetchall()
+    except _sqlite3.Error:
+        _vn_busy[0] = _time.monotonic() + _VN_BUSY_S
+        return None
+    finally:
+        con.close()
+
+
+def _vn_stat(p):
+    try:
+        st = os.stat(p)
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
+def _vn_universe():
+    """Bảng `ma` trong RAM, nạp lại khi tệp kho hoặc -wal đổi (WAL: ghi mới nằm ở -wal).
+
+    Kho có mà đọc không được → giữ bản cũ, không đổi key để lần sau thử lại; `ok` = False
+    nếu chưa từng nạp được kho này (xem _vn_chua_ro).
+    """
+    p = _vn_store_path()
+    key = (p, _vn_stat(p), _vn_stat(p + "-wal"))
+    if key == _vn_uni["key"]:
+        return _vn_uni
+    ma, stock = {}, set()
+    if key[1] is not None:
+        # Kho có tệp nhưng CHƯA dựng bảng `ma` (collector chưa chạy lần nào) là trạng thái
+        # BỀN, không phải khoá tạm: phải coi như kho rỗng, nếu không `ok` kẹt False và
+        # _vn_chua_ro sẽ hoãn tên MỌI mã 3 chữ của Mỹ (IBM, AMD…) vĩnh viễn.
+        co_bang = _vn_query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ma'")
+        if co_bang is None:
+            rows = None            # khoá/hỏng → giữ bản cũ, lần sau thử lại
+        elif not co_bang:
+            rows = []              # chưa có bảng → kho rỗng
+        else:
+            rows = _vn_query("SELECT symbol, san, loai, ten, nganh, theo_doi FROM ma")
+        if rows is None:
+            old = _vn_uni["key"]
+            _vn_uni["ok"] = bool(old and old[0] == p and old[1] is not None)
+            return _vn_uni
+        for sym, san, loai, ten, nganh, theo_doi in rows:
+            if not sym:
+                continue
+            sym = str(sym).upper()
+            ma[sym] = {"san": san or "", "loai": loai or "", "ten": ten or "", "nganh": nganh or ""}
+            if theo_doi and loai == "stock" and san in _VN_SAN:
+                stock.add(sym)
+    _vn_uni.update(key=key, ok=True, ma=ma, stock=frozenset(stock))
+    return _vn_uni
+
+
+def _vn_route(sym):
+    """Chuỗi app gửi → (mã trần, 'stock'|'index', hệ số DCHART), hoặc None nếu không phải VN.
+
+    Nhận 'ACB', ' acb ', 'ACB.VN', 'VNINDEX', '^VNINDEX'. Chỉ bỏ '^' cho chỉ số VN:
+    '^VIX' là chỉ số Mỹ, không phải cổ phiếu VIX. Tập cổ phiếu = _VN_TICKERS ∪ kho
+    (theo_doi=1, loai=stock, HOSE/HNX/UPCOM) − _VN_LOAI_TRU; '.VN' luôn ép đi VN.
+    """
+    if not isinstance(sym, str):
+        return None
+    s = sym.strip().upper()
+    ep = s.endswith(".VN")
+    if ep:
+        s = s[:-3]
+    if s.startswith("^"):
+        return (s[1:], "index", 1) if s[1:] in _VN_INDICES else None
+    if s in _VN_INDICES:
+        return s, "index", 1
+    # chỉ chữ/số ASCII: vừa là dạng mã sàn VN, vừa không để ký tự lạ lọt vào URL DCHART
+    if not (s.isascii() and s.isalnum() and len(s) <= 10):
+        return None
+    if ep:
+        return s, "stock", 1000
+    if s in _VN_LOAI_TRU:
+        return None
+    if s in _VN_TICKERS or s in _vn_universe()["stock"]:
+        return s, "stock", 1000
+    return None
+
+
+def _vn_chua_ro(sym):
+    """Kho có mà chưa đọc được → không biết mã 3 chữ này có phải VN: hoãn, đừng hỏi Yahoo
+    (quote_names bị app ghi bền; hoãn thì lần sau app hỏi lại)."""
+    s = sym.strip() if isinstance(sym, str) else ""
+    return not _vn_uni["ok"] and len(s) == 3 and s.isalpha()
+
+
+def _vn_san(bare, kind):
+    """Sàn từ kho; không có kho thì giữ nhãn cũ ('HOSE') cho cổ phiếu."""
+    m = _vn_universe()["ma"].get(bare)
+    return (m and m["san"]) or ("INDEX" if kind == "index" else "HOSE")
+
+
+def _vn_public(bare):
+    """Mã để app lưu/gọi lại: dạng trần nếu trần tự đi VN, không thì kèm '.VN' (AGG.VN…)."""
+    return bare if _vn_route(bare) else bare + ".VN"
+
+
+def _vn_today():
+    return datetime.now(_ICT).date()
+
+
+def _vn_ts(ngay):
+    """'YYYY-MM-DD' → epoch 00:00 UTC (như DCHART; dùng 00:00 giờ VN thì chart lùi 1 ngày)."""
+    return int(datetime.strptime(str(ngay)[:10], "%Y-%m-%d")
+               .replace(tzinfo=_timezone.utc).timestamp())
+
+
+def _vn_epoch(luc):
+    try:
+        dt = datetime.fromisoformat(str(luc))
+    except (TypeError, ValueError):
+        return None
+    return int((dt if dt.tzinfo else dt.replace(tzinfo=_ICT)).timestamp())
+
+
+def _vn_period_start(period):
+    p = (period or "6mo").lower()
+    if p == "max":
+        return None
+    today = _vn_today()
+    if p == "ytd":
+        return _date(today.year, 1, 1).isoformat()
+    return (today - _timedelta(days=_VN_PERIOD_NGAY.get(p, 183))).isoformat()
+
+
+def _vn_make_quote(sym, price, prev, opn, high, low, vol, ts, exchange):
+    price = float(price)
+    prev = float(prev) if prev else price
+    change = price - prev
+    return {
+        "symbol": sym,
+        "price": round(price, 2),
+        "change": round(change, 2),
+        "change_percent": round(change / prev * 100, 2) if prev else 0,
+        "volume": _int(vol, 0),
+        "high": _num(high),
+        "low": _num(low),
+        "open": _num(opn),
+        "previous_close": round(prev, 2),
+        "timestamp": ts,
+        "exchange": exchange,
+    }
+
+
+def _vn_store_bars(bare, start=None, end=None, n_last=None):
+    """Nến ngày trong kho, tăng dần: [(ngay, mo, cao, thap, dong, kl)].
+
+    start gồm, end KHÔNG gồm (như yfinance); n_last = chỉ lấy n phiên cuối.
+    """
+    sql, args = "SELECT ngay, mo, cao, thap, dong, kl FROM nen_ngay WHERE symbol=? AND dong>0", [bare]
+    if start:
+        sql, args = sql + " AND ngay>=?", args + [start]
+    if end:
+        sql, args = sql + " AND ngay<?", args + [end]
+    sql += " ORDER BY ngay DESC"
+    if n_last:
+        sql, args = sql + " LIMIT ?", args + [int(n_last)]
+    rows = _vn_query(sql, args) or []
+    rows.reverse()
+    return rows
+
+
+def _vn_store_quote(bare):
+    """Quote (dạng C++) từ kho: bảng giá gia_moi nếu không cũ hơn nến cuối, không thì
+    hai nến ngày cuối. Thay đổi tính theo giá tham chiếu như bảng điện VN. None nếu kho không có."""
+    kind = "index" if bare in _VN_INDICES else "stock"
+    bars = _vn_store_bars(bare, n_last=2)
+    g = _vn_query("SELECT ngay, luc, gia, tham_chieu, mo, cao, thap, kl FROM gia_moi"
+                  " WHERE symbol=?", (bare,))
+    g = g[0] if g else None
+    if g and g[2] and (not bars or (g[0] or "") >= bars[-1][0]):
+        ngay, luc, gia, tham_chieu, mo, cao, thap, kl = g
+        truoc = [b[4] for b in bars if b[0] < (ngay or "")]
+        prev = tham_chieu or (truoc[-1] if truoc else None)
+        ts = _vn_epoch(luc) or (_vn_ts(ngay) if ngay else int(_time.time()))
+        return _vn_make_quote(bare, gia, prev, mo, cao, thap, kl, ts, _vn_san(bare, kind))
+    if not bars:
+        return None
+    ngay, mo, cao, thap, dong, kl = bars[-1]
+    prev = bars[-2][4] if len(bars) > 1 else dong
+    return _vn_make_quote(bare, dong, prev, mo, cao, thap, kl, _vn_ts(ngay), _vn_san(bare, kind))
+
+
+def _vn_store_profile(bare):
+    """Hồ sơ từ ho_so, bù tên/sàn/ngành từ bảng ma. None nếu kho không biết mã."""
+    prof = {k: v for k, v in (_vn_universe()["ma"].get(bare) or {}).items() if v}
+    rows = _vn_query("SELECT ten, san, nganh, mo_ta, website, so_cp_luu_hanh, von_dieu_le,"
+                     " ngay_niem_yet FROM ho_so WHERE symbol=?", (bare,))
+    if rows:
+        cols = ("ten", "san", "nganh", "mo_ta", "website", "so_cp_luu_hanh", "von_dieu_le",
+                "ngay_niem_yet")
+        prof.update({k: v for k, v in zip(cols, rows[0]) if v not in (None, "")})
+    return prof or None
+
+
+def _vn_fold(s):
+    """Bỏ dấu + chữ thường để 'a chau' khớp 'Á Châu'."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(s or "")).replace("đ", "d").replace("Đ", "D")
+    return "".join(c for c in s if not unicodedata.combining(c)).lower()
+
+
+def _vn_store_search(q, limit=20):
+    """Mã VN khớp truy vấn (trùng khít > bắt đầu bằng > tên chứa), dạng kết quả search."""
+    qs = (q or "").strip()
+    qu = qs.upper()
+    qu = (qu[:-3] if qu.endswith(".VN") else qu).lstrip("^")
+    if not qu:
+        return []
+    qf = _vn_fold(qs)
+    ma = _vn_universe()["ma"]
+    # kho chưa có thì vẫn tìm được chỉ số + tập mã cứng (không tên)
+    pool = dict.fromkeys(_VN_INDICES | _VN_TICKERS, None)
+    pool.update(ma)
+    hits = []
+    for sym, m in pool.items():
+        m = m or {"san": "", "loai": "index" if sym in _VN_INDICES else "stock",
+                  "ten": _VN_INDEX_NAMES.get(sym, ""), "nganh": ""}
+        if m["loai"] not in ("stock", "index"):
+            continue
+        if sym == qu:
+            rank = 0
+        elif sym.startswith(qu):
+            rank = 1
+        elif len(qf) >= 2 and qf in m.setdefault("_f", _vn_fold(m["ten"])):
+            rank = 2
+        else:
+            continue
+        hits.append((rank, len(sym), sym, m))
+    out = []
+    for _r, _n, sym, m in sorted(hits, key=lambda h: h[:3])[:limit]:
+        idx = m["loai"] == "index"
+        out.append({
+            "symbol": _vn_public(sym),
+            "name": m["ten"] or _VN_INDEX_NAMES.get(sym, ""),
+            "exchange": m["san"] or ("INDEX" if idx else ""),
+            "type": "INDEX" if idx else "EQUITY",
+            "currency": "VND",
+            "sector": "",
+            "industry": m["nganh"],
+        })
+    return out
+
+
+def _vn_news(bare, count=20):
+    """Tin theo mã từ kho cuộn của gói Vietcap (AI News + CBTT), mới nhất trước. Không có → []."""
+    d = os.environ.get("FINCEPT_VN_STATE") or _VN_STATE_DEFAULT
+    out = []
+    for ten_tep, k_title, k_desc, mac_dinh in (
+            ("kho_vc_ainews.json", "than", "mo_ta", "Vietcap AI News"),
+            ("kho_vc_cbtt.json", "ten", "tom_tat", "Vietcap IQ")):
+        try:
+            with open(os.path.join(d, ten_tep), encoding="utf-8") as f:
+                items = json.load(f).get("items") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        for it in items:
+            if not isinstance(it, dict) or str(it.get("ma") or "").upper() != bare:
+                continue
+            title = it.get(k_title) or it.get("tieu_de") or ""
+            if not title:
+                continue
+            m = _VN_NGUON_RE.search(it.get("tieu_de") or "")
+            out.append({
+                "title": title,
+                "description": it.get(k_desc) or it.get("mo_ta") or "",
+                "url": it.get("goc") or it.get("link") or "",
+                "publisher": it.get("nguon") or (m.group(1).strip() if m else mac_dinh),
+                "published_date": str(it.get("luc") or ""),
+            })
+    # 'luc' cùng định dạng ISO +07:00 → so chuỗi là so thời gian
+    out.sort(key=lambda a: a["published_date"], reverse=True)
+    return out[:max(0, int(count))]
+
+
+def _vndirect_history(bare, mult, resolution, ts_from, ts_to):
+    """Một GET DCHART → [(ts, o, h, l, c, v)] đã nhân hệ số; [] nếu lỗi/rỗng."""
+    url = ("https://dchart-api.vndirect.com.vn/dchart/history?resolution=%s&symbol=%s"
+           "&from=%d&to=%d" % (resolution, _url_quote(bare), int(ts_from), int(ts_to)))
+    try:
+        req = _urllib_req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _urllib_req.urlopen(req, timeout=10, context=_VND_CTX) as resp:
+            data = json.loads(resp.read())
+        t, c = data.get("t") or [], data.get("c") or []
+        o, h, l, v = (data.get(k) or [] for k in ("o", "h", "l", "v"))
+    except Exception:
+        return []
+
+    def at(arr, i, m=1):
+        return arr[i] * m if i < len(arr) and arr[i] is not None else None
+
+    return [(int(t[i]), at(o, i, mult), at(h, i, mult), at(l, i, mult), c[i] * mult, at(v, i) or 0)
+            for i in range(min(len(t), len(c))) if c[i] is not None]
+
+
+def _vn_daily(route, start=None, end=None, n_last=None):
+    """Nến ngày cho mã VN: kho trước; kho rỗng, hoặc nến cuối cũ quá _VN_STALE_DAYS mà
+    DCHART có phiên mới hơn → dùng DCHART. Dạng [(ngay, o, h, l, c, v)] tăng dần."""
+    bare, _kind, mult = route
+    bars = _vn_store_bars(bare, start, end, n_last)
+    han = (_vn_today() - _timedelta(days=_VN_STALE_DAYS)).isoformat()
+    can_moi = end is None or end > han
+    if bars and (not can_moi or bars[-1][0] >= han):
+        return bars
+    ts_to = _vn_ts(end) - 1 if end else int(_time.time())
+    ts_from = _vn_ts(start) if start else 946684800  # 2000-01-01
+    if n_last and not start:
+        ts_from = ts_to - (n_last * 2 + 10) * 86400  # đủ phiên qua cuối tuần/lễ
+    dc = [(datetime.fromtimestamp(t, _timezone.utc).date().isoformat(), o, h, l, c, v)
+          for t, o, h, l, c, v in _vndirect_history(bare, mult, "D", ts_from, ts_to)]
+    if n_last:
+        dc = dc[-int(n_last):]
+    if dc and (not bars or dc[-1][0] > bars[-1][0]):
+        return dc
+    return bars
+
+
+def _vn_mm(f, a, b):
+    return b if a is None else a if b is None else f(a, b)
+
+
+def _vn_gop(bars, interval):
+    """Gộp nến ngày thành tuần/tháng/quý; khoá = ngày đầu kỳ (như yfinance)."""
+    if interval in ("1wk", "5d"):
+        def dau(d):
+            return d - _timedelta(days=d.weekday())
+    elif interval == "1mo":
+        def dau(d):
+            return d.replace(day=1)
+    elif interval == "3mo":
+        def dau(d):
+            return d.replace(month=(d.month - 1) // 3 * 3 + 1, day=1)
+    else:
+        return bars
+    ky = {}
+    for ngay, o, h, l, c, v in bars:
+        k = dau(_date.fromisoformat(str(ngay)[:10])).isoformat()
+        g = ky.get(k)
+        if g is None:
+            ky[k] = [k, o, h, l, c, v or 0]
+            continue
+        if g[1] is None:
+            g[1] = o
+        g[2], g[3] = _vn_mm(max, g[2], h), _vn_mm(min, g[3], l)
+        g[4], g[5] = c, g[5] + (v or 0)
+    return [tuple(g) for g in ky.values()]
+
+
+def _vn_points(bars):
+    """Nến (ngay, o, h, l, c, v) → điểm lịch sử C++ (timestamp 00:00 UTC của ngày)."""
+    return [{"timestamp": _vn_ts(d), "open": _num(o), "high": _num(h), "low": _num(l),
+             "close": _num(c), "volume": _int(v, 0)} for d, o, h, l, c, v in bars]
+
+
+def _vn_history(route, interval="1d", period="6mo", start=None, end=None):
+    """Lịch sử VN theo period, hoặc theo start/end nếu có. Không có dữ liệu → [].
+
+    Ngày/tuần/tháng: kho (tự gộp). Trong ngày: chỉ DCHART có (kho giữ nến ngày).
+    """
+    iv = (interval or "1d").lower()
+    p = (period or "6mo").lower()
+    if iv in _VN_DCHART_RES:
+        now = int(_time.time())
+        n_phien = None
+        if start:
+            ts_from, ts_to = _vn_ts(start), (_vn_ts(end) - 1 if end else now)
+        else:
+            # như Yahoo: 1m tối đa 7 ngày, trong ngày khác tối đa 60 ngày
+            ngay = min(max(_VN_PERIOD_NGAY.get(p, 183), 7), 7 if iv == "1m" else 60)
+            ts_from, ts_to, n_phien = now - ngay * 86400, now, _VN_PERIOD_PHIEN.get(p)
+        rows = _vndirect_history(route[0], route[2], _VN_DCHART_RES[iv], ts_from, ts_to)
+        if n_phien and rows:
+            giu = set(sorted({datetime.fromtimestamp(r[0], _ICT).date() for r in rows})[-n_phien:])
+            rows = [r for r in rows if datetime.fromtimestamp(r[0], _ICT).date() in giu]
+        return [{"timestamp": t, "open": _num(o), "high": _num(h), "low": _num(l),
+                 "close": _num(c), "volume": _int(v, 0)} for t, o, h, l, c, v in rows]
+    if start or end:
+        bars = _vn_daily(route, start=start, end=end)
+    elif iv == "1d" and p in _VN_PERIOD_PHIEN:
+        bars = _vn_daily(route, n_last=_VN_PERIOD_PHIEN[p])
+    else:
+        bars = _vn_daily(route, start=_vn_period_start(p))
+    return _vn_points(_vn_gop(bars, iv))
+
+
+def _vn_close_series(route, period):
+    """Chuỗi đóng cửa cho NAV: index ngày KHÔNG múi giờ (khớp yf.download ngày), giá đồng/điểm."""
+    bars = _vn_daily(route, start=_vn_period_start(period))
+    if not bars:
+        return None
+    return pd.Series([float(b[4]) for b in bars],
+                     index=pd.DatetimeIndex([str(b[0])[:10] for b in bars]), dtype="float64")
+
+
+def _vn_quote(symbol, route):
+    """Quote một mã VN: kho → DCHART. `symbol` trả về là chuỗi gốc. None nếu không có."""
+    q = _vn_store_quote(route[0])
+    if q is None:
+        got, _ = _vndirect_batch_quotes([symbol])
+        q = got[0] if got else None
+    return dict(q, symbol=symbol) if q else None
+
+
+def _vn_spark_from_store(symbols, period, out):
+    """Sparkline từ nến ngày trong kho vào `out`; trả các mã kho không có."""
+    n = 5 if period in ("5d", "1wk") else 22
+    left = []
+    for s in symbols:
+        bars = _vn_store_bars(_vn_route(s)[0], n_last=n)
+        if bars:
+            out[s] = [round(float(b[4]), 2) for b in bars]
+        else:
+            left.append(s)
+    return left
+
+
+def _vn_info(symbol, route):
+    """get_info cho mã VN: ho_so + giá (kho/DCHART), currency VND. Chỉ số không có trong kho
+    thì không đưa ra (C++ đọc thiếu = 0/rỗng) — không bịa."""
+    bare, kind, _ = route
+    prof = _vn_store_profile(bare) or {}
+    q = _vn_quote(symbol, route)
+    if not prof and q is None:
+        return {"error": f"Không có dữ liệu VN cho {symbol}", "symbol": symbol}
+    price = q["price"] if q else None
+    so_cp = prof.get("so_cp_luu_hanh")
+    nam = _vn_store_bars(bare, start=(_vn_today() - _timedelta(days=365)).isoformat())
+    return {
+        "symbol": symbol,
+        "company_name": prof.get("ten") or _VN_INDEX_NAMES.get(bare) or bare,
+        "sector": prof.get("nganh", ""),
+        "industry": prof.get("nganh", ""),
+        "description": prof.get("mo_ta", ""),
+        "website": prof.get("website", ""),
+        "country": "Vietnam",
+        "currency": "VND" if kind == "stock" else "",
+        "exchange": prof.get("san") or _vn_san(bare, kind),
+        "employees": None,
+        "current_price": price,
+        "market_cap": round(price * so_cp) if price and so_cp else None,
+        "shares_outstanding": so_cp,
+        "fifty_two_week_high": _num(max(b[2] or b[4] for b in nam)) if nam else None,
+        "fifty_two_week_low": _num(min(b[3] or b[4] for b in nam)) if nam else None,
+        "average_volume": _int(sum(b[5] or 0 for b in nam[-63:]) / len(nam[-63:])) if nam else None,
+        "timestamp": int(datetime.now().timestamp()),
+    }
+
+
+def _vn_company_profile(symbol, route):
+    bare, kind, _ = route
+    prof = _vn_store_profile(bare)
+    if not prof:
+        return {"error": f"No data found for symbol: {symbol}"}
+    q = _vn_store_quote(bare) or {}
+    so_cp = prof.get("so_cp_luu_hanh")
+    return {
+        "symbol": symbol,
+        "companyName": prof.get("ten") or bare,
+        "sector": prof.get("nganh", ""),
+        "industry": prof.get("nganh", ""),
+        "website": prof.get("website", ""),
+        "description": prof.get("mo_ta", ""),
+        "exchange": prof.get("san") or _vn_san(bare, kind),
+        "country": "Vietnam",
+        "city": "",
+        "address": "",
+        "phone": "",
+        "marketCap": round(q["price"] * so_cp) if q.get("price") and so_cp else None,
+        "employees": None,
+        "currency": "VND" if kind == "stock" else "",
+        "beta": None,
+        "price": q.get("price"),
+        "changes": q.get("change_percent"),
+    }
+
+
+# ─────────────────────── Lợi suất TPCP Việt Nam (mã VNGB1Y … VNGB20Y) ───────────────────────
+# Không có mã Yahoo nào cho lợi suất TPCP Việt Nam. Số lấy từ kho tại máy do
+# _System/fincept_bridge/goi_tpcp.py dựng mỗi ngày: đường cong lợi suất HNX (par_yield) qua
+# bản sao công khai trên GitHub. Đi qua đúng bốn cửa như mọi mã khác (báo giá, tên, sparkline,
+# lịch sử) để tab MARKETS và cửa sổ biểu đồ không phải có trường hợp đặc biệt nào.
+# ĐÂY LÀ ĐƯỜNG CONG KHỚP BẰNG MÔ HÌNH, không phải lợi suất khớp lệnh — xem canh_bao trong tệp.
+_TPCP_FILE = os.environ.get("FINCEPT_TPCP_FILE") or os.path.expanduser(
+    "~/SECOND BRAIN-OBSIDIAN/_System/fincept_bridge/data/tpcp_vn.json")
+_TPCP_RE = re.compile(r"^VNGB(\d{1,2}Y)$", re.I)
+_TPCP_CACHE = {"mtime": None, "doc": None}
+
+
+def _tpcp_ky(sym):
+    m = _TPCP_RE.match(str(sym or "").strip())
+    return m.group(1).upper() if m else None
+
+
+def _tpcp_doc():
+    """Đọc kho một lần cho mỗi phiên bản tệp (chế độ daemon giữ tiến trình sống)."""
+    try:
+        mt = os.path.getmtime(_TPCP_FILE)
+    except OSError:
+        return None
+    if _TPCP_CACHE["mtime"] != mt:
+        try:
+            with open(_TPCP_FILE, encoding="utf-8") as fh:
+                _TPCP_CACHE["doc"] = json.load(fh)
+            _TPCP_CACHE["mtime"] = mt
+        except (OSError, ValueError):
+            return None
+    return _TPCP_CACHE["doc"]
+
+
+def _tpcp_series(sym):
+    ky = _tpcp_ky(sym)
+    doc = _tpcp_doc() if ky else None
+    return (doc or {}).get("ky_han", {}).get(ky) or []
+
+
+def _tpcp_ts(ngay_iso):
+    # 15:00 giờ VN của ngày dữ liệu — mốc chốt ngày, cùng quy ước với nến ngày của kho VN.
+    y, mo, d = (int(x) for x in ngay_iso[:10].split("-"))
+    return int(datetime(y, mo, d, 8, 0, tzinfo=_timezone.utc).timestamp())
+
+
+def _tpcp_quote(sym):
+    s = _tpcp_series(sym)
+    if not s:
+        return None
+    ngay, gt = s[-1]
+    truoc = s[-2][1] if len(s) > 1 else gt
+    doi = gt - truoc
+    return {"symbol": sym, "price": round(gt, 4), "change": round(doi, 4),
+            # CHG% của lợi suất theo đúng quy ước Yahoo cho ^TNX (% của chính con số lợi suất),
+            # để cột trong bảng BONDS so được với nhau. Cửa sổ biểu đồ đọc bằng điểm %/bp.
+            "change_percent": round(doi / truoc * 100, 2) if truoc else 0.0,
+            "volume": 0, "high": round(gt, 4), "low": round(gt, 4), "open": round(truoc, 4),
+            "previous_close": round(truoc, 4), "timestamp": _tpcp_ts(ngay), "exchange": "HNX"}
+
+
+def _tpcp_name(sym):
+    ky = _tpcp_ky(sym)
+    if not ky:
+        return None
+    so = ky[:-1]
+    return f"TPCP Việt Nam {so} năm (HNX)"
+
+
+def _tpcp_history(sym, period="6mo", interval="1d"):
+    s = _tpcp_series(sym)
+    if not s:
+        return []
+    p = (period or "6mo").lower()
+    if p != "max":
+        cuoi = datetime.strptime(s[-1][0], "%Y-%m-%d").date()
+        if p == "ytd":
+            dau = cuoi.replace(month=1, day=1)
+        else:
+            ngay = {"1d": 1, "5d": 7, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366,
+                    "2y": 731, "5y": 1827, "10y": 3653}.get(p, 183)
+            dau = cuoi - _timedelta(days=ngay)
+        s = [x for x in s if x[0] >= dau.isoformat()]
+    iv = (interval or "1d").lower()
+    if iv in ("1wk", "5d", "1mo", "3mo"):
+        # Gộp tuần/tháng: lấy điểm CUỐI của mỗi rổ (lợi suất chốt kỳ), không trung bình.
+        gom = {}
+        for ngay, gt in s:
+            d = datetime.strptime(ngay, "%Y-%m-%d").date()
+            if iv in ("1wk", "5d"):
+                k = (d - _timedelta(days=d.weekday())).isoformat()
+            elif iv == "1mo":
+                k = d.strftime("%Y-%m")
+            else:
+                k = f"{d.year}-Q{(d.month - 1) // 3}"
+            gom[k] = (ngay, gt)
+        s = [list(v) for v in gom.values()]
+    return [{"timestamp": _tpcp_ts(n), "open": g, "high": g, "low": g, "close": g, "volume": 0}
+            for n, g in s]
+
+
 def get_quote(symbol):
     """Fetch real-time quote for a single symbol"""
     try:
+        vn = _vn_route(symbol)
+        if vn:  # mã VN: kho → DCHART, không bao giờ yf.Ticker mã trần
+            return _vn_quote(symbol, vn) or {"error": "No data available", "symbol": symbol}
         import io, contextlib
         ticker = yf.Ticker(symbol)
         _buf = io.StringIO()
@@ -120,6 +936,12 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
                   Note: Intraday data (< 1d) is only available for last 60 days
     """
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            start = _date.fromisoformat(str(start_date)[:10]).isoformat() if start_date else None
+            end = _date.fromisoformat(str(end_date)[:10]).isoformat() if end_date else None
+            return [dict(pt, symbol=symbol, adj_close=pt["close"])
+                    for pt in _vn_history(vn, interval, start=start, end=end)]
         import io, contextlib
         ticker = yf.Ticker(symbol)
         _buf = io.StringIO()
@@ -168,6 +990,18 @@ def get_historical_price(symbol, target_date):
         # Parse target date
         target = datetime.strptime(target_date, '%Y-%m-%d')
 
+        vn = _vn_route(symbol)
+        if vn:
+            # 10 ngày lùi để qua được kỳ nghỉ lễ VN; lấy phiên gần nhất ≤ ngày yêu cầu
+            bars = _vn_daily(vn, start=(target - timedelta(days=10)).strftime('%Y-%m-%d'),
+                             end=(target + timedelta(days=1)).strftime('%Y-%m-%d'))
+            if not bars:
+                return {"found": False, "error": "No data available for this date range", "symbol": symbol}
+            truoc = [b for b in bars if str(b[0])[:10] <= target_date]
+            b = truoc[-1] if truoc else bars[0]
+            return {"found": True, "symbol": symbol, "price": round(float(b[4]), 2),
+                    "date": str(b[0])[:10], "requested_date": target_date}
+
         # Fetch a range around the target date (to handle weekends/holidays)
         start = target - timedelta(days=5)
         end = target + timedelta(days=1)
@@ -208,6 +1042,9 @@ def get_historical_price(symbol, target_date):
 def get_info(symbol):
     """Fetch company info for a symbol"""
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            return _vn_info(symbol, vn)
         ticker = yf.Ticker(symbol)
         info = ticker.info
 
@@ -279,6 +1116,10 @@ def get_info(symbol):
 def get_financials(symbol):
     """Fetch financial statements for a symbol"""
     try:
+        if _vn_route(symbol):
+            # Kho chưa có BCTC: rỗng đúng schema, KHÔNG hỏi Yahoo (mã trần = công ty Mỹ).
+            return {"symbol": symbol, "income_statement": {}, "balance_sheet": {},
+                    "cash_flow": {}, "timestamp": int(datetime.now().timestamp())}
         ticker = yf.Ticker(symbol)
 
         # Get income statement, balance sheet, and cash flow
@@ -311,80 +1152,207 @@ def get_financials(symbol):
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
+def _extract_quote_from_df(data, yf_sym, report_sym):
+    """Extract a single quote dict from a yf.download DataFrame.
+    yf_sym is the ticker key inside the DataFrame (may include .VN suffix);
+    report_sym is the original symbol to return to the caller."""
+    if not isinstance(data.columns, pd.MultiIndex):
+        hist = data
+    else:
+        level0 = data.columns.get_level_values(0).unique().tolist()
+        level1 = data.columns.get_level_values(1).unique().tolist()
+        if yf_sym in level0:
+            hist = data[yf_sym]
+        elif yf_sym in level1:
+            hist = data.xs(yf_sym, axis=1, level=1)
+        else:
+            return None
+
+    if hist.empty or hist.dropna(how='all').empty:
+        return None
+
+    hist = hist.dropna(how='all')
+    raw_price = hist['Close'].iloc[-1]
+    if pd.isna(raw_price):
+        return None
+    current_price = float(raw_price)
+    raw_prev = hist['Close'].iloc[-2] if len(hist) >= 2 else raw_price
+    previous_close = float(raw_prev) if not pd.isna(raw_prev) else current_price
+    change = current_price - previous_close
+    change_percent = (change / previous_close) * 100 if previous_close else 0
+
+    return {
+        "symbol": report_sym,
+        "price": round(current_price, 2),
+        "change": round(change, 2),
+        "change_percent": round(change_percent, 2),
+        "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else 0,
+        "high": round(float(hist['High'].iloc[-1]), 2) if not pd.isna(hist['High'].iloc[-1]) else None,
+        "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
+        "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
+        "previous_close": round(previous_close, 2),
+        "timestamp": int(datetime.now().timestamp()),
+        "exchange": ""
+    }
+
+
+# Non-US exchange suffixes to try when a bare symbol returns no data.
+_EXCHANGE_SUFFIXES = [".VN", ".NS", ".BO", ".TO", ".L", ".AX", ".HK"]
+
+
 def get_batch_quotes(symbols):
-    """Fetch quotes for multiple symbols at once using yfinance batch download"""
-    try:
-        import io, contextlib
-        # Suppress any stdout noise from yfinance (progress bars, deprecation notices)
-        # that would corrupt the JSON output parsed by the host
-        _buf = io.StringIO()
-        with contextlib.redirect_stdout(_buf):
-            # Use 5d period to guarantee at least 2 trading days for futures/commodities
-            data = yf.download(symbols, period="5d", group_by='ticker', progress=False, threads=True,
-                               auto_adjust=True, timeout=_NET_TIMEOUT)
+    """Fetch quotes for multiple symbols.
 
-        if data is None or data.empty:
-            return []
+    Vietnamese symbols (_vn_route: tập cứng ∪ kho, '.VN', chỉ số) are routed to
+    VNDirect dchart API first — fresher than the store during a session —
+    then the local store, then yfinance with an explicit '.VN' suffix (stocks
+    only, never the bare ticker).  Everything else goes through yfinance with
+    the two-pass suffix retry.
+    """
+    import io, contextlib
 
-        results = []
-        for symbol in symbols:
-            try:
-                if not isinstance(data.columns, pd.MultiIndex):
-                    # Flat columns (rare): use directly
-                    hist = data
-                else:
-                    # MultiIndex columns — detect (Ticker, Price) vs (Price, Ticker)
-                    level0 = data.columns.get_level_values(0).unique().tolist()
-                    level1 = data.columns.get_level_values(1).unique().tolist()
-                    if symbol in level0:
-                        # (Ticker, Price) ordering
-                        hist = data[symbol]
-                    elif symbol in level1:
-                        # (Price, Ticker) ordering
-                        hist = data.xs(symbol, axis=1, level=1)
-                    else:
-                        continue
+    # ── Lợi suất TPCP VN: kho tại máy, không hỏi VNDirect lẫn Yahoo ──────
+    results_tpcp, symbols = [], list(symbols)
+    for s in [x for x in symbols if _tpcp_ky(x)]:
+        q = _tpcp_quote(s)
+        if q:
+            results_tpcp.append(q)
+        symbols.remove(s)
 
-                if hist.empty or hist.dropna(how='all').empty:
-                    continue
+    # ── Split VN vs non-VN ──────────────────────────────────────────────
+    routes = {s: _vn_route(s) for s in symbols}
+    vn_syms = [s for s in symbols if routes[s]]
+    other_syms = [s for s in symbols if not routes[s]]
 
-                hist = hist.dropna(how='all')
-                raw_price = hist['Close'].iloc[-1]
-                if pd.isna(raw_price):
-                    continue
-                current_price = float(raw_price)
-                # Use previous trading day close for accurate daily change.
-                # With period="5d" we always have >= 2 rows for normally-traded instruments.
-                raw_prev = hist['Close'].iloc[-2] if len(hist) >= 2 else raw_price
-                previous_close = float(raw_prev) if not pd.isna(raw_prev) else current_price
-                change = current_price - previous_close
-                change_percent = (change / previous_close) * 100 if previous_close else 0
+    results = list(results_tpcp)
 
-                results.append({
-                    "symbol": symbol,
-                    "price": round(current_price, 2),
-                    "change": round(change, 2),
-                    "change_percent": round(change_percent, 2),
-                    "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else 0,
-                    "high": round(float(hist['High'].iloc[-1]), 2) if not pd.isna(hist['High'].iloc[-1]) else None,
-                    "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
-                    "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
-                    "previous_close": round(previous_close, 2),
-                    "timestamp": int(datetime.now().timestamp()),
-                    "exchange": ""
-                })
-            except Exception:
+    # ── VN path: VNDirect primary ───────────────────────────────────────
+    if vn_syms:
+        vnd_quotes, vnd_failed = _vndirect_batch_quotes(vn_syms)
+        # DCHART trả chuỗi ĐÃ ĐIỀU CHỈNH quyền. FPT ngày 18/09/2026: DCHART 65.182 trong khi
+        # giá bảng là 71.700 — tỷ lệ đúng 0,9091 (= 1/1,1) ở MỌI phiên, tức thưởng 10%, không
+        # phải dữ liệu cũ. Dải giá của terminal phải khớp bảng điện nhà đầu tư đang nhìn, nên
+        # lệch >1% thì lấy KHO (giá bảng VCI, làm mới 10 phút/lượt); lệch nhỏ thì giữ DCHART
+        # vì trong phiên nó tươi hơn kho.
+        # Chỉ đổi khi CÙNG một phiên: %thay đổi khớp nhau (≤0,05 điểm %) mà MỨC GIÁ lệch >1%
+        # chính là dấu hiệu của hai cơ sở giá. Nếu %thay đổi khác nhau thì hai bên đang ở hai
+        # phiên khác nhau — lúc đó kho mới là bên cũ, phải giữ DCHART.
+        for q in vnd_quotes:
+            kho = _vn_store_quote(routes[q["symbol"]][0]) if routes.get(q["symbol"]) else None
+            if not (kho and kho.get("price") and q.get("price")):
                 continue
+            cung_phien = abs((kho.get("change_percent") or 0) - (q.get("change_percent") or 0)) <= 0.05
+            lech_muc = abs(q["price"] - kho["price"]) / kho["price"] > 0.01
+            if cung_phien and lech_muc:
+                q.update({k: v for k, v in kho.items() if k != "symbol"})
+        results.extend(vnd_quotes)
+        # DCHART hụt → kho; còn hụt thì cổ phiếu thử Yahoo hậu tố .VN (chỉ số thì thôi)
+        con_lai = []
+        for s in vnd_failed:
+            q = _vn_store_quote(routes[s][0])
+            if q:
+                results.append(dict(q, symbol=s))
+            elif routes[s][1] == "stock":
+                con_lai.append(s)
+        vnd_failed = con_lai
+        if vnd_failed:
+            try:
+                yf_vn = [routes[s][0] + ".VN" for s in vnd_failed]
+                _buf = io.StringIO()
+                with contextlib.redirect_stdout(_buf):
+                    data = yf.download(yf_vn, period="5d", group_by="ticker",
+                                       progress=False, threads=True, auto_adjust=True, timeout=_NET_TIMEOUT)
+                if data is not None and not data.empty:
+                    for yf_sym, orig in zip(yf_vn, vnd_failed):
+                        try:
+                            q = _extract_quote_from_df(data, yf_sym, orig)
+                            if q:
+                                results.append(q)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
 
-        return results
-    except Exception as e:
-        # Fallback: fetch one by one
-        results = []
-        for symbol in symbols:
-            quote = get_quote(symbol)
-            if quote and "error" not in quote:
-                results.append(quote)
-        return results
+    # ── Non-VN path: yfinance with two-pass suffix retry ────────────────
+    if other_syms:
+        def _download(syms):
+            _buf = io.StringIO()
+            with contextlib.redirect_stdout(_buf):
+                return yf.download(syms, period="5d", group_by='ticker',
+                                   progress=False, threads=True, auto_adjust=True, timeout=_NET_TIMEOUT)
+        try:
+            data = _download(other_syms)
+            missed = []
+
+            if data is not None and not data.empty:
+                for symbol in other_syms:
+                    try:
+                        q = _extract_quote_from_df(data, symbol, symbol)
+                        if q:
+                            results.append(q)
+                        else:
+                            if '.' not in symbol and not symbol.startswith('^') \
+                                    and '-' not in symbol and '=' not in symbol:
+                                missed.append(symbol)
+                    except Exception:
+                        missed.append(symbol)
+            else:
+                missed = [s for s in other_syms
+                          if '.' not in s and not s.startswith('^')
+                          and '-' not in s and '=' not in s]
+
+            # Pass 2: retry with exchange suffixes (skip .VN — already handled)
+            if missed:
+                suffix_map = {}
+                retry_syms = []
+                for sym in missed:
+                    for sfx in _EXCHANGE_SUFFIXES:
+                        yf_sym = sym + sfx
+                        suffix_map[yf_sym] = sym
+                        retry_syms.append(yf_sym)
+                if retry_syms:
+                    try:
+                        data2 = _download(retry_syms)
+                        if data2 is not None and not data2.empty:
+                            resolved = set()
+                            for yf_sym, orig_sym in suffix_map.items():
+                                if orig_sym in resolved:
+                                    continue
+                                try:
+                                    q = _extract_quote_from_df(data2, yf_sym, orig_sym)
+                                    if q:
+                                        results.append(q)
+                                        resolved.add(orig_sym)
+                                except Exception:
+                                    continue
+                    except Exception:
+                        pass
+        except Exception:
+            for symbol in other_syms:
+                quote = get_quote(symbol)
+                if quote and "error" not in quote:
+                    results.append(quote)
+
+    return results
+
+def _extract_sparkline_from_df(data, yf_sym):
+    """Extract close price list from a yf.download DataFrame for one ticker."""
+    if not isinstance(data.columns, pd.MultiIndex):
+        hist = data
+    else:
+        level0 = data.columns.get_level_values(0).unique().tolist()
+        level1 = data.columns.get_level_values(1).unique().tolist()
+        if yf_sym in level0:
+            hist = data[yf_sym]
+        elif yf_sym in level1:
+            hist = data.xs(yf_sym, axis=1, level=1)
+        else:
+            return None
+    closes = hist['Close'].dropna()
+    if closes.empty:
+        return None
+    return [round(float(v), 4) for v in closes.tolist()]
+
 
 # Month tokens used by futures shortNames, e.g. "Gold Jun 26" / "Crude Oil Jul 26".
 # We strip the contract-month suffix so the panel shows "Gold", not "Gold Jun 26".
@@ -428,6 +1396,24 @@ def get_quote_names(symbols):
     currencies = {}
     try:
         for symbol in symbols:
+            ten_tpcp = _tpcp_name(symbol)
+            if ten_tpcp:
+                names[symbol] = ten_tpcp          # lợi suất: không gắn tiền tệ
+                continue
+            vn = _vn_route(symbol)
+            if vn:
+                # App ghi BỀN tên/tiền tệ vào settings → mã VN tuyệt đối không hỏi Yahoo
+                # ("ACB" = Aurora Cannabis, USD). Kho không có tên thì bỏ trống (app giữ mã).
+                bare, kind, _ = vn
+                ten = ((_vn_store_profile(bare) or {}).get("ten")
+                       or (_VN_INDEX_NAMES.get(bare, "") if kind == "index" else ""))
+                if ten:
+                    names[symbol] = ten
+                if kind == "stock":  # chỉ số: không gắn tiền tệ (như quoteType INDEX)
+                    currencies[symbol] = "VND"
+                continue
+            if _vn_chua_ro(symbol):
+                continue
             try:
                 _buf = io.StringIO()
                 with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):
@@ -449,43 +1435,113 @@ def get_quote_names(symbols):
 def get_batch_sparklines(symbols, period="5d", interval="1h"):
     """Fetch close price series for multiple symbols — used for blotter sparklines.
     Returns: {"AAPL": [170.1, 171.3, ...], "MSFT": [...], ...}
+
+    Vietnamese symbols use the local store + VNDirect; everything else uses yfinance.
     """
-    try:
-        import io, contextlib
-        _buf = io.StringIO()
-        with contextlib.redirect_stdout(_buf):
-            data = yf.download(symbols, period=period, interval=interval,
-                               group_by='ticker', progress=False, threads=True, auto_adjust=True,
-                               timeout=_NET_TIMEOUT)
+    import io, contextlib
 
-        if data is None or data.empty:
-            return {"error": "No data"}
+    result = {}
+    symbols = list(symbols)
+    for s in [x for x in symbols if _tpcp_ky(x)]:
+        pts = _tpcp_history(s, period if period not in ("1d", "5d") else "1mo", "1d")
+        if pts:
+            result[s] = [p["close"] for p in pts]
+        symbols.remove(s)
 
-        result = {}
-        for symbol in symbols:
+    routes = {s: _vn_route(s) for s in symbols}
+    vn_syms = [s for s in symbols if routes[s]]
+    other_syms = [s for s in symbols if not routes[s]]
+
+    # ── VN path ─────────────────────────────────────────────────────────
+    if vn_syms:
+        # Kho chỉ giữ nến ngày: sparkline trong ngày (mặc định 1h) lấy DCHART trước, kho bù;
+        # sparkline ngày thì kho trước, DCHART bù.
+        if str(interval).lower() in _VN_DCHART_RES:
+            vnd_sparks, vnd_failed = _vndirect_batch_sparklines(vn_syms, period)
+            result.update(vnd_sparks)
+            vnd_failed = _vn_spark_from_store(vnd_failed, period, result)
+        else:
+            left = _vn_spark_from_store(vn_syms, period, result)
+            vnd_sparks, vnd_failed = _vndirect_batch_sparklines(left, period) if left else ({}, [])
+            result.update(vnd_sparks)
+        # Fallback failed VN stocks to yfinance with explicit .VN (never the bare ticker)
+        vnd_failed = [s for s in vnd_failed if routes[s][1] == "stock"]
+        if vnd_failed:
             try:
-                if not isinstance(data.columns, pd.MultiIndex):
-                    hist = data
-                else:
-                    level0 = data.columns.get_level_values(0).unique().tolist()
-                    level1 = data.columns.get_level_values(1).unique().tolist()
-                    if symbol in level0:
-                        hist = data[symbol]
-                    elif symbol in level1:
-                        hist = data.xs(symbol, axis=1, level=1)
-                    else:
-                        continue
-
-                closes = hist['Close'].dropna()
-                if closes.empty:
-                    continue
-                result[symbol] = [round(float(v), 4) for v in closes.tolist()]
+                yf_vn = [routes[s][0] + ".VN" for s in vnd_failed]
+                _buf = io.StringIO()
+                with contextlib.redirect_stdout(_buf):
+                    data = yf.download(yf_vn, period=period, interval=interval,
+                                       group_by="ticker", progress=False,
+                                       threads=True, auto_adjust=True, timeout=_NET_TIMEOUT)
+                if data is not None and not data.empty:
+                    for yf_sym, orig in zip(yf_vn, vnd_failed):
+                        try:
+                            sp = _extract_sparkline_from_df(data, yf_sym)
+                            if sp:
+                                result[orig] = sp
+                        except Exception:
+                            continue
             except Exception:
-                continue
+                pass
 
-        return result
-    except Exception as e:
-        return {"error": str(e)}
+    # ── Non-VN path: yfinance with two-pass suffix retry ────────────────
+    if other_syms:
+        def _download(syms):
+            _buf = io.StringIO()
+            with contextlib.redirect_stdout(_buf):
+                return yf.download(syms, period=period, interval=interval,
+                                   group_by='ticker', progress=False,
+                                   threads=True, auto_adjust=True, timeout=_NET_TIMEOUT)
+        try:
+            data = _download(other_syms)
+            missed = []
+
+            if data is not None and not data.empty:
+                for symbol in other_syms:
+                    try:
+                        sp = _extract_sparkline_from_df(data, symbol)
+                        if sp:
+                            result[symbol] = sp
+                        elif '.' not in symbol and not symbol.startswith('^') \
+                                and '-' not in symbol and '=' not in symbol:
+                            missed.append(symbol)
+                    except Exception:
+                        missed.append(symbol)
+            else:
+                missed = [s for s in other_syms
+                          if '.' not in s and not s.startswith('^')
+                          and '-' not in s and '=' not in s]
+
+            if missed:
+                suffix_map = {}
+                retry_syms = []
+                for sym in missed:
+                    for sfx in _EXCHANGE_SUFFIXES:
+                        yf_sym = sym + sfx
+                        suffix_map[yf_sym] = sym
+                        retry_syms.append(yf_sym)
+                if retry_syms:
+                    try:
+                        data2 = _download(retry_syms)
+                        if data2 is not None and not data2.empty:
+                            resolved = set()
+                            for yf_sym, orig_sym in suffix_map.items():
+                                if orig_sym in resolved:
+                                    continue
+                                try:
+                                    sp = _extract_sparkline_from_df(data2, yf_sym)
+                                    if sp:
+                                        result[orig_sym] = sp
+                                        resolved.add(orig_sym)
+                                except Exception:
+                                    continue
+                    except Exception:
+                        pass
+        except Exception as e:
+            return {"error": str(e)}
+
+    return result
 
 
 def get_batch_all(payload):
@@ -553,6 +1609,9 @@ def get_batch_all(payload):
 def get_company_profile(symbol):
     """Get company profile data formatted for peer comparison"""
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            return _vn_company_profile(symbol, vn)
         ticker = yf.Ticker(symbol)
         info = ticker.info
 
@@ -587,6 +1646,12 @@ def get_company_profile(symbol):
 def get_financial_ratios(symbol):
     """Get financial ratios formatted for peer comparison"""
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            # Kho chưa có chỉ số tài chính → mọi chỉ số để null (không bịa); kho không biết mã → lỗi như bản gốc.
+            if not _vn_store_profile(vn[0]):
+                return {"error": f"No data found for symbol: {symbol}"}
+            return {"symbol": symbol, **dict.fromkeys(_VN_RATIO_KEYS)}
         ticker = yf.Ticker(symbol)
         info = ticker.info
 
@@ -651,10 +1716,15 @@ def search_symbols(query, limit=20):
         from urllib.parse import quote as url_quote
         import ssl
 
-        results = []
         query_str = query.strip()
         if not query_str:
             return {"results": [], "query": query, "count": 0}
+
+        # Mã VN lên trước (tra kho cục bộ, không tốn mạng). Chặn một nửa số chỗ thôi:
+        # truy vấn rộng kiểu 'A' khớp hàng chục mã VN, đẩy hết kết quả quốc tế ra ngoài.
+        vn_hits = _vn_store_search(query_str, max(3, limit // 2))
+        results = list(vn_hits)
+        da_co = {r["symbol"] for r in vn_hits}
 
         # Use Yahoo Finance search/autocomplete API (fast, no auth needed)
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={url_quote(query_str)}&quotesCount={limit}&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query"
@@ -668,8 +1738,13 @@ def search_symbols(query, limit=20):
 
                 for q in quotes:
                     symbol = q.get("symbol", "")
-                    if not symbol:
+                    if not symbol or symbol in da_co:
                         continue
+                    # Mã trần trùng mã VN (ACB = Aurora Cannabis) phải bị bỏ: chọn dòng đó
+                    # thì app lưu "ACB" rồi mọi lệnh sau vẫn đi VN → hiển thị mâu thuẫn.
+                    if _vn_route(symbol):
+                        continue
+                    da_co.add(symbol)
                     results.append({
                         "symbol": symbol,
                         "name": q.get("longname") or q.get("shortname", ""),
@@ -685,6 +1760,8 @@ def search_symbols(query, limit=20):
             suffixes = ["", ".NS", ".BO"]
             for suffix in suffixes:
                 candidate = query_upper + suffix
+                if candidate in da_co or _vn_route(candidate):
+                    continue
                 try:
                     ticker = yf.Ticker(candidate)
                     info = ticker.info
@@ -702,6 +1779,7 @@ def search_symbols(query, limit=20):
                 except Exception:
                     continue
 
+        results = results[:limit]
         return {"results": results, "query": query, "count": len(results)}
 
     except Exception as e:
@@ -710,6 +1788,11 @@ def search_symbols(query, limit=20):
 def get_news(symbol, count=20):
     """Fetch news articles for a symbol using yfinance"""
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            # Kho tin Vietcap (AI News + CBTT). Rỗng thì trả rỗng, TUYỆT ĐỐI không hỏi
+            # Yahoo: ticker.news('ACB') trả tin Aurora Cannabis.
+            return {"articles": _vn_news(vn[0], count), "symbol": symbol}
         import re
         ticker = yf.Ticker(symbol)
         raw_news = ticker.news
@@ -763,8 +1846,8 @@ def _candidate_yf_symbols(symbol):
     # Already has an exchange suffix or is an index/crypto/forex pair → trust it.
     if '.' in s or s.startswith('^') or '-' in s or '=' in s:
         return [s]
-    # Bare ticker — try US first, then Toronto, NSE, BSE, LSE, ASX, Hong Kong.
-    return [s, f"{s}.TO", f"{s}.NS", f"{s}.BO", f"{s}.L", f"{s}.AX", f"{s}.HK"]
+    # Bare ticker — try US first, then Toronto, NSE, BSE, LSE, ASX, Hong Kong, Vietnam.
+    return [s, f"{s}.TO", f"{s}.NS", f"{s}.BO", f"{s}.L", f"{s}.AX", f"{s}.HK", f"{s}.VN"]
 
 
 def _resolve_for_history(symbols, period):
@@ -781,11 +1864,28 @@ def _resolve_for_history(symbols, period):
          close series.
     """
     import io, contextlib, logging
-    candidates_per_symbol = {s: _candidate_yf_symbols(s) for s in symbols}
+
+    # Mã VN dựng chuỗi đóng cửa từ kho/DCHART và KHÔNG bao giờ vào yf.download:
+    # _candidate_yf_symbols thử mã trần TRƯỚC .VN, nên vị thế ACB từng được định giá
+    # theo Aurora Cannabis (~3,9 USD thay vì 22.800 đ). Mã VN không có dữ liệu thì bị
+    # bỏ qua (rơi vào `missing`), chứ không lui xuống Yahoo.
+    vn_resolved = {}
+    vn_syms = set()
+    for s in symbols:
+        r = _vn_route(s)
+        if not r:
+            continue
+        vn_syms.add(s)
+        ser = _vn_close_series(r, period)
+        if ser is not None and not ser.empty:
+            # nhãn 'VN:' chỉ để người đọc `resolved` biết nguồn; C++ chỉ đọc dates/navs/costs
+            vn_resolved[s] = ("VN:" + r[0], ser)
+
+    candidates_per_symbol = {s: _candidate_yf_symbols(s) for s in symbols if s not in vn_syms}
     all_candidates = sorted({c for variants in candidates_per_symbol.values() for c in variants})
 
     if not all_candidates:
-        return {}
+        return vn_resolved
 
     # yfinance prints "Failed download" / HTTP error lines straight to stdout
     # AND uses the logging module. Silence both — we report misses via the
@@ -812,7 +1912,7 @@ def _resolve_for_history(symbols, period):
         yf_logger.setLevel(prev_level)
 
     if data is None or data.empty:
-        return {}
+        return vn_resolved
 
     single = len(all_candidates) == 1
 
@@ -824,7 +1924,7 @@ def _resolve_for_history(symbols, period):
         except Exception:
             return None
 
-    resolved = {}
+    resolved = dict(vn_resolved)
     for s, variants in candidates_per_symbol.items():
         for v in variants:
             ser = closes_for(v)
@@ -1047,7 +2147,14 @@ def get_portfolio_nav_history_replay(transactions):
 
 def get_historical_period(symbol, period='6mo', interval='1d'):
     """Fetch historical data using a period string (e.g., '1mo', '6mo', '1y', '5y')"""
+    if _tpcp_ky(symbol):
+        return _tpcp_history(symbol, period, interval)
     try:
+        vn = _vn_route(symbol)
+        if vn:
+            # Đường chart/candle widget/batch_all.histories. Kho (nến ngày) → DCHART;
+            # trong ngày thì chỉ DCHART có. Không có dữ liệu → [] (không hỏi Yahoo).
+            return _vn_history(vn, interval, period=period)
         import io, contextlib
         ticker = yf.Ticker(symbol)
         _buf = io.StringIO()
@@ -1093,6 +2200,19 @@ def resolve_symbol(symbol):
     symbol = symbol.strip().upper()
     if not symbol:
         return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
+
+    vn = _vn_route(symbol)
+    if vn:
+        bare, kind, _ = vn
+        # Mã đã nằm trong tập cứng / chỉ số / kho thì khỏi dò mạng. Chỉ dạng '.VN' lạ
+        # mới phải hỏi một lần, để không báo found=True bừa.
+        biet = bare in _VN_INDICES or bare in _VN_TICKERS or bare in _vn_universe()["ma"]
+        found = bool(biet or _vn_daily(vn, n_last=1))
+        # trả dạng chuẩn gọi lại được: trần nếu trần tự đi VN, không thì kèm '.VN' (AGG.VN)
+        return {"resolved_symbol": _vn_public(bare) if found else symbol,
+                "original_symbol": symbol,
+                "exchange": _vn_san(bare, kind) if found else "",
+                "found": found}
 
     # If it already has a suffix, verify it works and return as-is
     if '.' in symbol or symbol.startswith('^') or '-' in symbol or '=' in symbol:

@@ -58,6 +58,8 @@ class MarketPanel : public QWidget {
     void show_row_context_menu(const QPoint& pos);
 
   private:
+    /// Mở cửa sổ biểu đồ lịch sử cho mã ở dòng `row`.
+    void open_chart_for_row(int row);
     void build_ui();
     /// Re-apply tr() lookups to every widget whose text we keep a handle to.
     /// Called from changeEvent() on QEvent::LanguageChange.

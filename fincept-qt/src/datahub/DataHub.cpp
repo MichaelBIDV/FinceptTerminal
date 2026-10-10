@@ -622,6 +622,8 @@ void DataHub::do_publish(const QString& topic, const QVariant& value, std::chron
         st.total_publishes += 1;
         st.in_flight = false;
         st.last_error.clear(); // successful publish clears any stored error
+        st.consecutive_errors = 0;
+        st.retry_after_ms = 0;
         // Gap 3 fix: store the per-publish TTL separately so the next
         // override-less publish reverts to policy.ttl_ms. Zero = no
         // override, fall back to policy.ttl_ms.
@@ -697,6 +699,8 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         bool is_pattern = false;
     };
     QVector<PendingErr> error_targets;
+    qint64 backoff_ms = 0;
+    int failures = 0;
     {
         QMutexLocker lock(&mutex_);
         auto& st = state_for(topic);
@@ -704,6 +708,16 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         st.last_error = error;
         st.last_error_ms = now_ms();
         st.total_errors += 1;
+        st.consecutive_errors += 1;
+        failures = st.consecutive_errors;
+        // See TopicPolicy::max_error_backoff_ms. The first failure keeps the
+        // plain min_interval cadence so a transient miss retries as before.
+        if (st.policy.max_error_backoff_ms > 0 && !st.policy.push_only && failures >= 2) {
+            const qint64 base = std::max(st.policy.min_interval_ms, 1000);
+            const int shift = std::min(failures - 1, 20);
+            backoff_ms = std::min<qint64>(base << shift, st.policy.max_error_backoff_ms);
+            st.retry_after_ms = st.last_error_ms + backoff_ms;
+        }
 
         if (auto it = error_subscriptions_.find(topic); it != error_subscriptions_.end()) {
             for (const auto& e : it.value())
@@ -727,7 +741,14 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
             t.single_slot(error);
     }
 
-    LOG_WARN("DataHub", QString("publish_error topic='%1' error='%2'").arg(topic).arg(error.left(200)));
+    if (backoff_ms > 0)
+        LOG_WARN("DataHub", QString("publish_error topic='%1' error='%2' — failure #%3, next scheduled retry in %4s")
+                                .arg(topic)
+                                .arg(error.left(200))
+                                .arg(failures)
+                                .arg(backoff_ms / 1000));
+    else
+        LOG_WARN("DataHub", QString("publish_error topic='%1' error='%2'").arg(topic).arg(error.left(200)));
     emit topic_error(topic, error);
 }
 
@@ -867,6 +888,8 @@ void DataHub::request(const QStringList& topics, bool force) {
                 (t - st.last_refresh_request_ms) < st.policy.min_interval_ms) {
                 continue;
             }
+            if (!force && t < st.retry_after_ms)
+                continue; // error backoff — see TopicPolicy::max_error_backoff_ms
             Producer* p = find_producer(topic);
             if (!p) {
                 orphan_topics.append(topic);
@@ -1038,6 +1061,10 @@ void DataHub::scheduler_body() {
             const bool ttl_expired = !have_value || (t - st.last_publish_ms) >= effective_ttl_ms(st);
             const bool min_interval_ok = (t - st.last_refresh_request_ms) >= st.policy.min_interval_ms;
             if (!ttl_expired || !min_interval_ok)
+                continue;
+            // A never-published topic is TTL-expired on every tick, so without
+            // this gate a permanently failing topic retries every min_interval.
+            if (t < st.retry_after_ms)
                 continue;
 
             Producer* p = find_producer(topic);

@@ -174,7 +174,7 @@ class EquityOrderEntry : public QWidget {
     bool is_paper_ = true;
     bool is_buy_side_ = true;
     QString current_symbol_ = "RELIANCE";
-    QString current_exchange_ = "NSE";
+    QString current_exchange_ = "HOSE";   // máy này giao dịch VN; NSE là mặc định upstream
     QString current_currency_ = "INR";
     QString broker_id_;
 

@@ -54,6 +54,7 @@ class MarketPulsePanel : public QWidget {
     QWidget* build_losers_section();
     QWidget* build_global_snapshot_section();
     QWidget* build_market_hours_section();
+    QWidget* build_vn_pulse_section();
 
     /// Re-apply all token-based styles so a theme switch updates every child widget.
     void refresh_theme();
@@ -187,6 +188,24 @@ class MarketPulsePanel : public QWidget {
     // Loading overlay shown over the scroll area while the union of the
     // breadth/movers/snapshot caches fills up. The denominator is the
     // unique-symbol union size (~70), updated every time a cache changes.
+    // ── NHỊP ĐẬP VNINDEX ──
+    // Panel này vốn thuần Mỹ. Khối VN đọc một tệp JSON PHẲNG do lớp dữ liệu của hệ sinh ra
+    // (_System/fincept_bridge/goi_vnstock._json_nhip → hub :9000), không đi qua DataHub: số VN
+    // không tới từ nhà cung cấp của app, và panel chỉ nên VẼ chứ không tính.
+    // HttpClient chỉ gắn X-API-Key cho request cùng host với base_url_, nên gọi localhost
+    // KHÔNG rò khoá (HttpClient.cpp:133-146).
+    SectionHeader sh_vn_;
+    QLabel* vn_phien_ = nullptr;      // ĐANG MỞ / ĐÃ ĐÓNG + mốc ảnh chụp bảng
+    QVector<StatRow> vn_index_rows_;  // VN-Index · VN30 · HNX-Index
+    QLabel* vn_breadth_ = nullptr;    // tăng/giảm/đứng · trần/sàn
+    QLabel* vn_value_ = nullptr;      // giá trị khớp toàn thị trường
+    QLabel* vn_ngoai_ = nullptr;      // khối ngoại mua/bán ròng
+    QLabel* vn_movers_ = nullptr;     // top tăng / top giảm
+    QTimer* vn_timer_ = nullptr;
+    void fetch_vn_pulse();
+    void render_vn_pulse(const QJsonObject& o);
+    void style_vn_pulse();
+
     int total_expected_symbols_ = 0;
     widgets::LoadingOverlay* loading_overlay_ = nullptr;
     void update_loading_progress();

@@ -42,6 +42,8 @@ class MarketsScreen : public QWidget {
     void wire_panel(MarketPanel* p);
     void save_splitter_state();
     void restore_splitter_state();
+    /// Chia đều lại các cột khi trạng thái đã lưu có cột hẹp hơn 12% (xem .cpp).
+    void fix_column_widths(int lan);
     int column_with_fewest_panels() const;
 
     // Panel management
@@ -109,7 +111,8 @@ class MarketsScreen : public QWidget {
 
     static constexpr int kMinRefreshIntervalSec = 300;
     static constexpr int kRefreshTimeoutMs = 10000;
-    static constexpr int kNumColumns = 3;
+    // Cột thứ tư dành riêng cho VIỆT NAM (VN-Index + VN30 = 32 dòng) — cần cả chiều cao màn hình.
+    static constexpr int kNumColumns = 4;
 };
 
 } // namespace fincept::screens

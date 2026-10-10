@@ -178,7 +178,9 @@ EquityOrderEntry::EquityOrderEntry(QWidget* parent) : QWidget(parent) {
     exchange_combo_ = new QComboBox;
     exchange_combo_->setObjectName("eqOeCombo");
     // Exchange codes (NSE/BSE/…) are market identifiers — data, not translated.
-    exchange_combo_->addItems({"NSE", "BSE", "NYSE", "NASDAQ"});
+    // Sàn VN lên trước vì đây là thị trường chính của máy này; mã VN để TRẦN, không hậu tố
+    // (yfinance_data.py định tuyến sang kho vnstock), nên không cần thêm vào suffix_map.
+    exchange_combo_->addItems({"HOSE", "HNX", "UPCOM", "NYSE", "NASDAQ", "NSE", "BSE"});
     exchange_combo_->setFixedHeight(28);
     connect(exchange_combo_, &QComboBox::currentTextChanged, this, [this](const QString& ex) {
         current_exchange_ = ex;

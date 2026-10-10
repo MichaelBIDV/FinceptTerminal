@@ -7,8 +7,15 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include "network/http/HttpClient.h"
+
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QPointer>
+
 #include <QDateTime>
 #include <QFrame>
+#include <QLocale>
 #include <QPalette>
 #include <QSet>
 #include <QShowEvent>
@@ -113,6 +120,7 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     cl->addWidget(build_breadth_section());
     cl->addWidget(build_gainers_section());
     cl->addWidget(build_losers_section());
+    cl->addWidget(build_vn_pulse_section());   // NHỊP ĐẬP VNINDEX — ngay dưới thị trường Mỹ
     cl->addWidget(build_global_snapshot_section());
     cl->addWidget(build_market_hours_section());
     cl->addStretch();
@@ -132,6 +140,12 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     hours_timer_ = new QTimer(this);
     hours_timer_->setInterval(60000); // 1 min — market open/close status
     connect(hours_timer_, &QTimer::timeout, this, &MarketPulsePanel::refresh_market_hours);
+
+    // Khối VN đọc tệp JSON của lớp dữ liệu qua hub, nhịp 60 s: gói vn_banggia làm mới kho mỗi
+    // 10 phút trong phiên, nên 60 s là đủ nhanh mà không đập vào hub vô ích.
+    vn_timer_ = new QTimer(this);
+    vn_timer_->setInterval(60000);
+    connect(vn_timer_, &QTimer::timeout, this, &MarketPulsePanel::fetch_vn_pulse);
 
     // Coalesces a burst of ~70 per-symbol hub deliveries into one render pass.
     render_timer_ = new QTimer(this);
@@ -246,6 +260,7 @@ void MarketPulsePanel::refresh_theme() {
     style_breadth(nyse_row_);
     style_breadth(nasdaq_row_);
     style_breadth(sp500_row_);
+    style_vn_pulse();
 
     // ── Global Snapshot rows ──
     // Each stat row has a fixed val_color that maps to a specific token.
@@ -309,12 +324,17 @@ void MarketPulsePanel::showEvent(QShowEvent* e) {
         hub_subscribe_all();
     refresh_market_hours();
     hours_timer_->start();
+    fetch_vn_pulse();
+    if (vn_timer_)
+        vn_timer_->start();
 }
 
 void MarketPulsePanel::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     hub_unsubscribe_all();
     hours_timer_->stop();
+    if (vn_timer_)
+        vn_timer_->stop();
     if (render_timer_)
         render_timer_->stop();
 }
@@ -779,6 +799,178 @@ QString MarketPulsePanel::market_status(const QString& region) {
 }
 
 // ── Refresh ───────────────────────────────────────────────────────────────────
+
+namespace {
+/// Màu theo dấu, dùng chung cho mọi số của khối VN.
+QString vn_mau(double v) {
+    if (v > 0)
+        return fincept::ui::colors::POSITIVE();
+    if (v < 0)
+        return fincept::ui::colors::NEGATIVE();
+    return fincept::ui::colors::TEXT_SECONDARY();
+}
+/// 1234567 → "1.234.567" (dấu chấm phân nhóm, đúng lối Việt).
+QString vn_so(double v, int nd = 2) {
+    QString s = QLocale(QLocale::Vietnamese).toString(v, 'f', nd);
+    return s;
+}
+} // namespace
+
+QWidget* MarketPulsePanel::build_vn_pulse_section() {
+    auto* w = new QWidget(this);
+    auto* vl = new QVBoxLayout(w);
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
+
+    vl->addWidget(build_section_header("NHIP DAP VNINDEX", QChar(0x25C6), ui::colors::WARNING()));
+
+    // Dòng trạng thái phiên + mốc ảnh chụp bảng (hop-2: mốc của DỮ LIỆU, không phải giờ vẽ).
+    vn_phien_ = new QLabel("--", this);
+    vn_phien_->setContentsMargins(12, 2, 12, 2);
+    vl->addWidget(vn_phien_);
+
+    // Ba chỉ số: VN-Index · VN30 · HNX-Index
+    vn_index_rows_.resize(3);
+    for (int i = 0; i < vn_index_rows_.size(); ++i) {
+        auto* rw = new QWidget(this);
+        auto* hl = new QHBoxLayout(rw);
+        hl->setContentsMargins(12, 4, 12, 4);
+        auto& row = vn_index_rows_[i];
+        row.container = rw;
+        row.name_lbl = new QLabel("--", rw);
+        hl->addWidget(row.name_lbl);
+        hl->addStretch();
+        row.val = new QLabel("--", rw);
+        hl->addWidget(row.val);
+        row.chg = new QLabel("", rw);
+        hl->addWidget(row.chg);
+        vl->addWidget(rw);
+    }
+
+    for (QLabel** slot : {&vn_breadth_, &vn_value_, &vn_ngoai_, &vn_movers_}) {
+        *slot = new QLabel("--", this);
+        (*slot)->setContentsMargins(12, 2, 12, 2);
+        (*slot)->setWordWrap(true);
+        vl->addWidget(*slot);
+    }
+    style_vn_pulse();
+    return w;
+}
+
+void MarketPulsePanel::style_vn_pulse() {
+    const QString phu = QString("color: %1; font-size: 9px; background: transparent;")
+                            .arg(ui::colors::TEXT_SECONDARY());
+    for (QLabel* l : {vn_phien_, vn_breadth_, vn_value_, vn_ngoai_, vn_movers_}) {
+        if (l)
+            l->setStyleSheet(phu);
+    }
+    for (auto& row : vn_index_rows_) {
+        if (row.name_lbl)
+            row.name_lbl->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold;"
+                                                " background: transparent;")
+                                            .arg(ui::colors::TEXT_PRIMARY()));
+        if (row.val)
+            row.val->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold;"
+                                           " background: transparent;")
+                                       .arg(ui::colors::TEXT_PRIMARY()));
+    }
+}
+
+void MarketPulsePanel::fetch_vn_pulse() {
+    // Tệp do _System/fincept_bridge/goi_vnstock._json_nhip sinh, hub :9000 phục vụ tĩnh.
+    // HttpClient chỉ gắn khoá API cho request CÙNG HOST với base_url_, nên localhost không
+    // nhận khoá (HttpClient.cpp:133-146) — đúng điều ta muốn.
+    QPointer<MarketPulsePanel> self = this;
+    HttpClient::instance().get(
+        QStringLiteral("http://localhost:9000/sys/fincept_bridge/data/vn_nhip.json"),
+        [self](Result<QJsonDocument> res) {
+            if (!self || !res.is_ok())
+                return;
+            const QJsonDocument doc = res.value();
+            if (doc.isObject())
+                self->render_vn_pulse(doc.object());
+        },
+        this);
+}
+
+void MarketPulsePanel::render_vn_pulse(const QJsonObject& o) {
+    const QString phien = o.value("phien").toString();
+    const QString chup = o.value("anh_chup").toString();
+    if (vn_phien_) {
+        vn_phien_->setText(QString("PHIEN %1 · %2 · bang luc %3")
+                               .arg(phien, o.value("ngay_gd").toString(),
+                                    chup.mid(11, 5).isEmpty() ? QStringLiteral("--") : chup.mid(11, 5)));
+    }
+
+    const QJsonArray cs = o.value("chi_so").toArray();
+    for (int i = 0; i < vn_index_rows_.size(); ++i) {
+        auto& row = vn_index_rows_[i];
+        if (i >= cs.size()) {
+            if (row.container)
+                row.container->setVisible(false);
+            continue;
+        }
+        if (row.container)
+            row.container->setVisible(true);
+        const QJsonObject c = cs.at(i).toObject();
+        const double pct = c.value("pct").toDouble();
+        if (row.name_lbl)
+            row.name_lbl->setText(c.value("ten").toString());
+        if (row.val)
+            row.val->setText(vn_so(c.value("diem").toDouble()));
+        if (row.chg) {
+            row.chg->setText(QString("%1%2%")
+                                 .arg(pct >= 0 ? "+" : "", vn_so(pct, 2)));
+            row.chg->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold;"
+                                           " background: transparent;")
+                                       .arg(vn_mau(pct)));
+        }
+    }
+
+    const QJsonObject dr = o.value("do_rong").toObject();
+    if (vn_breadth_) {
+        vn_breadth_->setText(QString("DO RONG  %1 tang / %2 giam / %3 dung  ·  tran %4 · san %5")
+                                 .arg(dr.value("tang").toInt())
+                                 .arg(dr.value("giam").toInt())
+                                 .arg(dr.value("dung").toInt())
+                                 .arg(dr.value("tran").toInt())
+                                 .arg(dr.value("san").toInt()));
+    }
+    if (vn_value_) {
+        vn_value_->setText(QString("GIA TRI KHOP  %1 ty d  ·  %2 tr cp  ·  %3 ma")
+                               .arg(vn_so(dr.value("gt_ty").toDouble(), 0),
+                                    vn_so(dr.value("kl_tr").toDouble(), 1))
+                               .arg(dr.value("tong").toInt()));
+    }
+    if (vn_ngoai_) {
+        const QJsonValue ng = o.value("khoi_ngoai_ty");
+        if (ng.isNull() || ng.isUndefined()) {
+            vn_ngoai_->setText(QStringLiteral("KHOI NGOAI  [CAN DATA]"));
+        } else {
+            const double v = ng.toDouble();
+            vn_ngoai_->setText(QString("KHOI NGOAI  %1%2 ty d  (%3)")
+                                   .arg(v >= 0 ? "+" : "", vn_so(v, 1),
+                                        v >= 0 ? QStringLiteral("mua rong") : QStringLiteral("ban rong")));
+            vn_ngoai_->setStyleSheet(QString("color: %1; font-size: 9px; background: transparent;")
+                                         .arg(vn_mau(v)));
+        }
+    }
+    if (vn_movers_) {
+        auto ke = [](const QJsonArray& a) {
+            QStringList s;
+            for (const auto& v : a) {
+                const QJsonObject m = v.toObject();
+                s << QString("%1 %2%3%")
+                         .arg(m.value("ma").toString(),
+                              m.value("pct").toDouble() >= 0 ? "+" : "",
+                              vn_so(m.value("pct").toDouble(), 1));
+            }
+            return s.join("  ");
+        };
+        vn_movers_->setText(QString("TANG  %1\nGIAM  %2")
+                                .arg(ke(o.value("tang").toArray()), ke(o.value("giam").toArray())));
+    }
+}
 
 void MarketPulsePanel::refresh_market_hours() {
     for (auto& hr : hours_rows_) {

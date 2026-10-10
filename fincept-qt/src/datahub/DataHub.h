@@ -239,6 +239,10 @@ class DataHub : public QObject {
         TopicPolicy policy;
         bool policy_explicit = false; ///< set_policy() was called
         QString last_error;           ///< most recent error string; cleared on successful publish
+        // Error backoff — policy.max_error_backoff_ms > 0 only. Both reset on
+        // a successful publish.
+        int consecutive_errors = 0;
+        qint64 retry_after_ms = 0; ///< scheduler / non-forced request() skip the topic before this
         // Coalesce state — non-zero policy.coalesce_within_ms only.
         bool coalesce_pending = false; ///< a deferred publish is armed
         QVariant coalesce_latest;      ///< most recent value inside window
