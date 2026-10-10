@@ -1,0 +1,1314 @@
+{
+ "baskets": {
+  "VN100": {
+   "code": "VN100",
+   "label": "VN100",
+   "pb": null,
+   "pe": {
+    "as_of": "2026-01-02",
+    "m1": 10.0,
+    "m2": 9.5,
+    "mean": 10.5,
+    "now": 11.0,
+    "p1": 11.0,
+    "p2": 11.5,
+    "series": [
+     [
+      1000,
+      10.0
+     ],
+     [
+      2000,
+      11.0
+     ]
+    ],
+    "sigma": 1.1,
+    "zone": "ĐẮT (>+1σ)",
+    "zone_key": "rich"
+   }
+  },
+  "VN30": {
+   "code": "VN30",
+   "label": "VN30 — 30 vốn hóa lớn",
+   "pb": {
+    "as_of": "2026-01-02",
+    "m1": 10.0,
+    "m2": 9.5,
+    "mean": 10.5,
+    "now": 11.0,
+    "p1": 11.0,
+    "p2": 11.5,
+    "series": [
+     [
+      1000,
+      10.0
+     ],
+     [
+      2000,
+      11.0
+     ]
+    ],
+    "sigma": -1.2,
+    "zone": "RẺ (<−1σ)",
+    "zone_key": "cheap"
+   },
+   "pe": {
+    "as_of": "2026-01-02",
+    "m1": 10.0,
+    "m2": 9.5,
+    "mean": 10.5,
+    "now": 11.0,
+    "p1": 11.0,
+    "p2": 11.5,
+    "series": [
+     [
+      1000,
+      10.0
+     ],
+     [
+      2000,
+      11.0
+     ]
+    ],
+    "sigma": 0.5,
+    "zone": "TRUNG TÍNH",
+    "zone_key": "neutral"
+   }
+  }
+ },
+ "exvic3": {
+  "as_of": "2026-01-02",
+  "exv3_pe_mean": 14.0,
+  "exv3_pe_sd": 2.0,
+  "exv3_pe_sigma": 1.5,
+  "exv3_pe_zone": "ĐẮT (>+1σ)",
+  "exv3_pe_zone_key": "rich",
+  "pe_exv3_now": 10.0,
+  "pe_full_now": 12.5,
+  "series": {
+   "w3": [
+    [
+     1000,
+     20.0
+    ],
+    [
+     2000,
+     null
+    ]
+   ]
+  },
+  "vic3": []
+ },
+ "forecast": {
+  "VN100": {
+   "pb": null,
+   "pe": {
+    "caveats": [
+     "Giá đứng yên"
+    ],
+    "flat": {
+     "m1": 10.0,
+     "m2": 9.5,
+     "mean": 10.5,
+     "p1": 11.0,
+     "p2": 11.5
+    },
+    "growth": [
+     {
+      "W": 2.0,
+      "est": false,
+      "flag": null,
+      "g": 0.25,
+      "max": 0.3,
+      "min": 0.2,
+      "n": 2,
+      "simple_median": 0.25,
+      "sources": [
+       {
+        "date": "2025-12-20",
+        "id": "src_a",
+        "org": "Org A",
+        "tier": "SS-T3",
+        "url": "https://a.invalid/x",
+        "value": 0.3,
+        "weight": 1.0
+       },
+       {
+        "coverage_mcap_pct": 87.6,
+        "date": "2025-12-30",
+        "file": "Estimates.xls",
+        "id": "ciq_bu",
+        "n_tickers": 90,
+        "org": "S&P Capital IQ",
+        "tier": "FACT-T2",
+        "value": 0.2,
+        "weight": 1.0
+       }
+      ],
+      "tier": "SS-T3/FACT-T2 (đồng thuận)",
+      "year": 2026
+     },
+     {
+      "W": 0.0,
+      "est": true,
+      "flag": "quy tắc dài hạn",
+      "g": 0.121,
+      "max": null,
+      "min": null,
+      "n": 0,
+      "simple_median": null,
+      "sources": [],
+      "tier": "EST",
+      "year": 2027
+     }
+    ],
+    "method": "ratio(t) = R0·EPS0/EPS(t)",
+    "milestones": [
+     {
+      "date": "2026-12-31",
+      "ms": 4000,
+      "ratio": 9.17,
+      "sigma": -2.66,
+      "zone": "RẺ (<−1σ)"
+     }
+    ],
+    "ratio_path": [
+     [
+      2000,
+      11.0
+     ],
+     [
+      3000,
+      10.0
+     ],
+     [
+      4000,
+      9.17
+     ]
+    ],
+    "x0": 2000
+   }
+  },
+  "VN30": {
+   "pb": {
+    "caveats": [
+     "Giá đứng yên"
+    ],
+    "flat": {
+     "m1": 10.0,
+     "m2": 9.5,
+     "mean": 10.5,
+     "p1": 11.0,
+     "p2": 11.5
+    },
+    "growth": [
+     {
+      "W": 2.0,
+      "est": false,
+      "flag": null,
+      "g": 0.25,
+      "max": 0.3,
+      "min": 0.2,
+      "n": 2,
+      "simple_median": 0.25,
+      "sources": [
+       {
+        "date": "2025-12-20",
+        "id": "src_a",
+        "org": "Org A",
+        "tier": "SS-T3",
+        "url": "https://a.invalid/x",
+        "value": 0.3,
+        "weight": 1.0
+       },
+       {
+        "coverage_mcap_pct": 87.6,
+        "date": "2025-12-30",
+        "file": "Estimates.xls",
+        "id": "ciq_bu",
+        "n_tickers": 90,
+        "org": "S&P Capital IQ",
+        "tier": "FACT-T2",
+        "value": 0.2,
+        "weight": 1.0
+       }
+      ],
+      "tier": "SS-T3/FACT-T2 (đồng thuận)",
+      "year": 2026
+     },
+     {
+      "W": 0.0,
+      "est": true,
+      "flag": "quy tắc dài hạn",
+      "g": 0.121,
+      "max": null,
+      "min": null,
+      "n": 0,
+      "simple_median": null,
+      "sources": [],
+      "tier": "EST",
+      "year": 2027
+     }
+    ],
+    "method": "ratio(t) = R0·EPS0/EPS(t)",
+    "milestones": [
+     {
+      "date": "2026-12-31",
+      "ms": 4000,
+      "ratio": 9.17,
+      "sigma": -2.66,
+      "zone": "RẺ (<−1σ)"
+     }
+    ],
+    "ratio_path": [
+     [
+      2000,
+      11.0
+     ],
+     [
+      3000,
+      10.0
+     ],
+     [
+      4000,
+      9.17
+     ]
+    ],
+    "x0": 2000
+   },
+   "pe": {
+    "caveats": [
+     "Giá đứng yên"
+    ],
+    "flat": {
+     "m1": 10.0,
+     "m2": 9.5,
+     "mean": 10.5,
+     "p1": 11.0,
+     "p2": 11.5
+    },
+    "growth": [
+     {
+      "W": 2.0,
+      "est": false,
+      "flag": null,
+      "g": 0.25,
+      "max": 0.3,
+      "min": 0.2,
+      "n": 2,
+      "simple_median": 0.25,
+      "sources": [
+       {
+        "date": "2025-12-20",
+        "id": "src_a",
+        "org": "Org A",
+        "tier": "SS-T3",
+        "url": "https://a.invalid/x",
+        "value": 0.3,
+        "weight": 1.0
+       },
+       {
+        "coverage_mcap_pct": 87.6,
+        "date": "2025-12-30",
+        "file": "Estimates.xls",
+        "id": "ciq_bu",
+        "n_tickers": 90,
+        "org": "S&P Capital IQ",
+        "tier": "FACT-T2",
+        "value": 0.2,
+        "weight": 1.0
+       }
+      ],
+      "tier": "SS-T3/FACT-T2 (đồng thuận)",
+      "year": 2026
+     },
+     {
+      "W": 0.0,
+      "est": true,
+      "flag": "quy tắc dài hạn",
+      "g": 0.121,
+      "max": null,
+      "min": null,
+      "n": 0,
+      "simple_median": null,
+      "sources": [],
+      "tier": "EST",
+      "year": 2027
+     }
+    ],
+    "method": "ratio(t) = R0·EPS0/EPS(t)",
+    "milestones": [
+     {
+      "date": "2026-12-31",
+      "ms": 4000,
+      "ratio": 9.17,
+      "sigma": -2.66,
+      "zone": "RẺ (<−1σ)"
+     }
+    ],
+    "ratio_path": [
+     [
+      2000,
+      11.0
+     ],
+     [
+      3000,
+      10.0
+     ],
+     [
+      4000,
+      9.17
+     ]
+    ],
+    "x0": 2000
+   }
+  },
+  "VNINDEX": {
+   "pb": null,
+   "pe": {
+    "base_path": [
+     [
+      3000,
+      0.2
+     ],
+     [
+      4000,
+      0.22
+     ],
+     [
+      5000,
+      0.24
+     ],
+     [
+      6000,
+      0.26
+     ]
+    ],
+    "caveats": [
+     "Chỉ dải định giá dịch theo EPS — KHÔNG dự báo giá"
+    ],
+    "eps_pins": [
+     {
+      "date": "2025-12-31",
+      "method": "EPS 4 quý tới Q4/2025 theo finfo (engine)",
+      "ms": 2500,
+      "tier": "EST",
+      "value": 0.2,
+      "year": 2025
+     }
+    ],
+    "growth": [
+     {
+      "W": 2.0,
+      "est": false,
+      "flag": null,
+      "g": 0.25,
+      "max": 0.3,
+      "min": 0.2,
+      "n": 2,
+      "simple_median": 0.25,
+      "sources": [
+       {
+        "date": "2025-12-20",
+        "id": "src_a",
+        "org": "Org A",
+        "tier": "SS-T3",
+        "url": "https://a.invalid/x",
+        "value": 0.3,
+        "weight": 1.0
+       },
+       {
+        "coverage_mcap_pct": 87.6,
+        "date": "2025-12-30",
+        "file": "Estimates.xls",
+        "id": "ciq_bu",
+        "n_tickers": 90,
+        "org": "S&P Capital IQ",
+        "tier": "FACT-T2",
+        "value": 0.2,
+        "weight": 1.0
+       }
+      ],
+      "tier": "SS-T3/FACT-T2 (đồng thuận)",
+      "year": 2026
+     },
+     {
+      "W": 0.0,
+      "est": true,
+      "flag": "quy tắc dài hạn",
+      "g": 0.121,
+      "max": null,
+      "min": null,
+      "n": 0,
+      "simple_median": null,
+      "sources": [],
+      "tier": "EST",
+      "year": 2027
+     }
+    ],
+    "method": "EPS ghim theo năm tài chính",
+    "milestones": [
+     {
+      "base": 0.24,
+      "cheap1": 3.12,
+      "cheap2": 2.64,
+      "date": "2026-12-31",
+      "fair": 3.6,
+      "ms": 5000,
+      "rich1": 4.08,
+      "rich2": 4.56
+     }
+    ],
+    "points": {
+     "cheap1": [
+      [
+       3000,
+       2.6
+      ],
+      [
+       4000,
+       2.86
+      ],
+      [
+       5000,
+       3.12
+      ],
+      [
+       6000,
+       3.38
+      ]
+     ],
+     "cheap2": [
+      [
+       3000,
+       2.2
+      ],
+      [
+       4000,
+       2.42
+      ],
+      [
+       5000,
+       2.64
+      ],
+      [
+       6000,
+       2.86
+      ]
+     ],
+     "fair": [
+      [
+       3000,
+       3.0
+      ],
+      [
+       4000,
+       3.3
+      ],
+      [
+       5000,
+       3.6
+      ],
+      [
+       6000,
+       3.9
+      ]
+     ],
+     "rich1": [
+      [
+       3000,
+       3.4
+      ],
+      [
+       4000,
+       3.74
+      ],
+      [
+       5000,
+       4.08
+      ],
+      [
+       6000,
+       4.42
+      ]
+     ],
+     "rich2": [
+      [
+       3000,
+       3.8
+      ],
+      [
+       4000,
+       4.18
+      ],
+      [
+       5000,
+       4.56
+      ],
+      [
+       6000,
+       4.94
+      ]
+     ]
+    },
+    "x0": 3000
+   },
+   "targets": [
+    {
+     "horizon": "2026-12-31",
+     "id": "t-2026-12",
+     "label": "12/26",
+     "members": [
+      {
+       "date": "2025-12-20",
+       "org": "Org A",
+       "scenario": "base",
+       "tier": "SS-T3",
+       "url": "https://a.invalid/t",
+       "value": 4.0
+      }
+     ],
+     "ms": 5000,
+     "value": 4.0
+    }
+   ]
+  },
+  "meta": {
+   "age_hours": "<volatile>",
+   "caveats": [
+    "Tham khảo, không khuyến nghị"
+   ],
+   "generated": "2026-01-02 10:10 ICT",
+   "horizon_months": 36,
+   "method": "trung vị có trọng số",
+   "sources": [
+    {
+     "date": "2025-12-20",
+     "definition": "tăng trưởng LNST toàn thị trường",
+     "id": "src_a",
+     "org": "Org A",
+     "tier": "SS-T3",
+     "title": "Chiến lược 2026",
+     "url": "https://a.invalid/x"
+    },
+    {
+     "date": "2025-12-30",
+     "file": "Estimates.xls",
+     "id": "ciq_bu",
+     "org": "S&P Capital IQ",
+     "tier": "FACT-T2",
+     "title": "Estimates export"
+    }
+   ],
+   "warnings": [
+    "2029: không nguồn nào → quy tắc dài hạn (EST)"
+   ]
+  }
+ },
+ "index": {
+  "pb": null,
+  "pe": {
+   "as_of": "2026-01-02",
+   "chart": {
+    "cheap1": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ],
+    "cheap2": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ],
+    "fair": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ],
+    "price": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ],
+    "rich1": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ],
+    "rich2": [
+     [
+      1000,
+      1.0
+     ],
+     [
+      2000,
+      null
+     ],
+     [
+      3000,
+      3.0
+     ]
+    ]
+   },
+   "forward": {
+    "cheap1": 2300.0,
+    "date": "2027-12-31",
+    "fair": 2600.0,
+    "growth": 0.18,
+    "rich1": 2900.0,
+    "rich2": 3200.0
+   },
+   "mean": 15.0,
+   "metric": "P/E",
+   "n_points": 3,
+   "now": 12.5,
+   "price_now": 1800.0,
+   "sd": 2.0,
+   "sigma": -1.25,
+   "zone": "RẺ (<−1σ)",
+   "zone_key": "cheap"
+  }
+ },
+ "keynotes": [
+  {
+   "boi_canh": "Bối cảnh",
+   "date": "2018-04-09",
+   "id": "2018-04-dinh",
+   "key_factors": [
+    "Yếu tố 1",
+    "Yếu tố 2"
+   ],
+   "kind": "dinh",
+   "ms": 1523232000000,
+   "nguyen_nhan": "Nguyên nhân",
+   "nhan_phu": "margin + bank",
+   "numbers": [
+    {
+     "asof": "2018-04-09",
+     "k": "close",
+     "scope": "VNINDEX",
+     "src_date": "2026-01-02",
+     "src_org": "Vietcap",
+     "tier": "FACT-T2",
+     "unit": "điểm",
+     "v": 1204.33
+    },
+    {
+     "asof": "2018-04-09",
+     "k": "pe",
+     "method": "close × μ / fair (điểm engine ≤4 ngày)",
+     "scope": "VNINDEX",
+     "sigma": 2.1,
+     "src_date": "2026-01-02",
+     "src_org": "Engine HHP",
+     "tier": "EST",
+     "unit": "x",
+     "v": 19.1
+    }
+   ],
+   "priority": 1,
+   "provisional": false,
+   "sau_do": "Sau đó",
+   "scopes": [
+    "VNINDEX",
+    "VN100"
+   ],
+   "sources": [
+    {
+     "date": "2018-04-10",
+     "domain": "bao-a.invalid",
+     "org": "Báo A",
+     "tier": "NEWS",
+     "title": "Tin A",
+     "type": "news",
+     "url": "https://www.bao-a.invalid/a"
+    },
+    {
+     "date": "2018-04-11",
+     "domain": "bao-b.invalid",
+     "org": "Báo B",
+     "tier": "NEWS",
+     "title": "Tin B",
+     "type": "news",
+     "url": "https://bao-b.invalid/b"
+    },
+    {
+     "date": "2026-01-02",
+     "domain": "trading.vc.invalid",
+     "org": "Vietcap",
+     "tier": "FACT-T2",
+     "title": "OHLC ngày VNINDEX",
+     "type": "data",
+     "url": "https://trading.vc.invalid/ohlc"
+    },
+    {
+     "date": "2026-01-02",
+     "domain": null,
+     "org": "Engine HHP",
+     "tier": "EST",
+     "title": "hhp_vn100_valuation.json",
+     "type": "data",
+     "url": null
+    }
+   ],
+   "tier": "NEWS",
+   "tier_effective": "NEWS",
+   "title": "Tiêu đề 2018-04-dinh",
+   "warnings": [
+    "Bỏ phạm vi không hỗ trợ: VNX50"
+   ]
+  },
+  {
+   "boi_canh": "Bối cảnh",
+   "date": "2020-03-24",
+   "id": "2020-03-day",
+   "key_factors": [
+    "Yếu tố 1",
+    "Yếu tố 2"
+   ],
+   "kind": "day",
+   "ms": 1585008000000,
+   "nguyen_nhan": "Nguyên nhân",
+   "nhan_phu": "",
+   "numbers": [
+    {
+     "asof": "2020-03-24",
+     "k": "close",
+     "scope": "VNINDEX",
+     "src_date": "2026-01-02",
+     "src_org": "Vietcap",
+     "tier": "FACT-T2",
+     "unit": "điểm",
+     "v": 1204.33
+    }
+   ],
+   "priority": 1,
+   "provisional": false,
+   "sau_do": "Sau đó",
+   "scopes": [
+    "VNINDEX"
+   ],
+   "sources": [
+    {
+     "date": "2020-03-20",
+     "domain": "hose.invalid",
+     "org": "HOSE",
+     "tier": "FACT-T1",
+     "title": "Thông báo",
+     "type": "filing",
+     "url": "https://hose.invalid/tb"
+    },
+    {
+     "date": "2026-01-02",
+     "domain": "trading.vc.invalid",
+     "org": "Vietcap",
+     "tier": "FACT-T2",
+     "title": "OHLC ngày VNINDEX",
+     "type": "data",
+     "url": "https://trading.vc.invalid/ohlc"
+    }
+   ],
+   "tier": "FACT-T1",
+   "tier_effective": "FACT-T1",
+   "title": "Tiêu đề 2020-03-day",
+   "warnings": []
+  },
+  {
+   "boi_canh": "Bối cảnh",
+   "date": "2025-12-15",
+   "id": "2025-12-dinh",
+   "key_factors": [
+    "Yếu tố 1",
+    "Yếu tố 2"
+   ],
+   "kind": "dinh",
+   "ms": 1765756800000,
+   "nguyen_nhan": "Nguyên nhân",
+   "nhan_phu": "",
+   "numbers": [
+    {
+     "asof": "2025-12-15",
+     "k": "close",
+     "scope": "VNINDEX",
+     "src_date": "2026-01-02",
+     "src_org": "Vietcap",
+     "tier": "FACT-T2",
+     "unit": "điểm",
+     "v": 1204.33
+    }
+   ],
+   "priority": 3,
+   "provisional": true,
+   "sau_do": "Sau đó",
+   "scopes": [
+    "VN30"
+   ],
+   "sources": [
+    {
+     "date": "2018-04-10",
+     "domain": "bao-a.invalid",
+     "org": "Báo A",
+     "tier": "NEWS",
+     "title": "Tin A",
+     "type": "news",
+     "url": "https://www.bao-a.invalid/a"
+    },
+    {
+     "date": "2018-04-11",
+     "domain": "bao-b.invalid",
+     "org": "Báo B",
+     "tier": "NEWS",
+     "title": "Tin B",
+     "type": "news",
+     "url": "https://bao-b.invalid/b"
+    },
+    {
+     "date": "2026-01-02",
+     "domain": "trading.vc.invalid",
+     "org": "Vietcap",
+     "tier": "FACT-T2",
+     "title": "OHLC ngày VNINDEX",
+     "type": "data",
+     "url": "https://trading.vc.invalid/ohlc"
+    }
+   ],
+   "tier": "NEWS",
+   "tier_effective": "NEWS",
+   "title": "Tiêu đề 2025-12-dinh",
+   "warnings": []
+  }
+ ],
+ "members": {
+  "VN100": [
+   "BBB",
+   "AAA",
+   "CCC",
+   "MISS"
+  ],
+  "VN30": [
+   "AAA",
+   "EEE",
+   "ZZZ"
+  ]
+ },
+ "meta": {
+  "age_hours": "<volatile>",
+  "baskets_generated": "2026-01-02 09:30 ICT",
+  "capiq": {
+   "exported": "2026-01-02 07:51 AM ET",
+   "exported_date": "2026-01-02",
+   "file": "SPGlobal_Export_1-2-2026.xlsx",
+   "n": 4,
+   "n_pe": 3,
+   "source_dir": "Downloads"
+  },
+  "data_dir": "<volatile>",
+  "disclaimer": "Tham khảo",
+  "expert": "Huỳnh Hoàng Phương",
+  "fails": [
+   "XX"
+  ],
+  "file_mtime": "<volatile>",
+  "forecast_file": {
+   "age_hours": "<volatile>",
+   "mtime": "<volatile>"
+  },
+  "generated": "2026-01-02 10:00 ICT",
+  "keynotes_file": {
+   "mtime": "<volatile>",
+   "n": 3,
+   "n_dropped": 0
+  },
+  "members_generated": "2026-01-02 09:00 ICT",
+  "method": "P = E×P/E",
+  "n_tickers": 5,
+  "prices": {
+   "as_of": "2026-01-02",
+   "fallback": [
+    "EEE",
+    "DDD"
+   ],
+   "n_fallback": 2,
+   "n_vietcap": 3,
+   "source": "vnstore vn_store.db (Vietcap vci_board / vci_history)"
+  },
+  "sources": [
+   "test"
+  ],
+  "stale": "<volatile>",
+  "warnings": [
+   "Giá hiện tại của 1 mã không lấy được từ Vietcap, đang dùng nguồn dự phòng: EEE (simplize_stale) — Chạy: python3 hhp_vn100_valuation.py (thư mục knowledge_os)"
+  ],
+  "web_url": "http://localhost:9000/sys/knowledge_os/hhp_vn100_valuation.html"
+ },
+ "missing": {
+  "VN100": [
+   "MISS"
+  ],
+  "VN30": [
+   "ZZZ"
+  ]
+ },
+ "rows": [
+  {
+   "bvps": null,
+   "capiq": {
+    "bvps_est": 9000.0,
+    "eps_est": null,
+    "eps_growth_1y": null,
+    "exported": "2026-01-02",
+    "last_price": null,
+    "n_rec": 2,
+    "n_tp": null,
+    "pb": 1.1,
+    "pe": null,
+    "rec": "Hold",
+    "roe_est": null,
+    "tp": null,
+    "tp_date": null,
+    "tp_high": null,
+    "tp_low": null,
+    "tp_med": null,
+    "upside_pct": null
+   },
+   "eps": null,
+   "eps_src": null,
+   "fa_catalyst": null,
+   "fa_rec": "MUA",
+   "fa_tp": 12000,
+   "forward": null,
+   "in_vn100": true,
+   "in_vn30": false,
+   "links": {
+    "miquant": "https://example.invalid/mq",
+    "simplize": "https://example.invalid/sz",
+    "vietcap_iq": "https://example.invalid/iq"
+   },
+   "pb": {
+    "as_of": "2026-01-02",
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": 0.2,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": "TRUNG TÍNH",
+    "zone_key": "neutral"
+   },
+   "pe": null,
+   "price_date": null,
+   "price_now": null,
+   "price_src": null,
+   "price_time": null,
+   "quality_val": "1",
+   "tk": "BBB"
+  },
+  {
+   "bvps": 8000.0,
+   "capiq": {
+    "bvps_est": 8600.0,
+    "eps_est": 1100.0,
+    "eps_growth_1y": 10.0,
+    "exported": "2026-01-02",
+    "last_price": 9950.0,
+    "n_rec": 8,
+    "n_tp": 7,
+    "pb": 1.3,
+    "pe": 9.1,
+    "rec": "Outperform",
+    "roe_est": 13.2,
+    "tp": 13000.0,
+    "tp_date": "2025-12-20",
+    "tp_high": 15000.0,
+    "tp_low": 11000.0,
+    "tp_med": 12800.0,
+    "upside_pct": 30.0
+   },
+   "eps": 1000.0,
+   "eps_src": "implied",
+   "fa_catalyst": null,
+   "fa_rec": "MUA",
+   "fa_tp": 12000,
+   "forward": null,
+   "in_vn100": true,
+   "in_vn30": true,
+   "links": {
+    "miquant": "https://example.invalid/mq",
+    "simplize": "https://example.invalid/sz",
+    "vietcap_iq": "https://example.invalid/iq"
+   },
+   "pb": {
+    "as_of": "2026-01-02",
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": 1.5,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": "ĐẮT (>+1σ)",
+    "zone_key": "rich"
+   },
+   "pe": {
+    "as_of": "2026-01-02",
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": -1.5,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": "RẺ (<−1σ)",
+    "zone_key": "cheap"
+   },
+   "price_date": "2026-01-02",
+   "price_now": 10000,
+   "price_src": "vietcap_board",
+   "price_time": "2026-01-02T15:14:27+07:00",
+   "quality_val": "1",
+   "tk": "AAA"
+  },
+  {
+   "bvps": 8000.0,
+   "capiq": null,
+   "eps": 1000.0,
+   "eps_src": "implied",
+   "fa_catalyst": null,
+   "fa_rec": "MUA",
+   "fa_tp": 12000,
+   "forward": null,
+   "in_vn100": true,
+   "in_vn30": false,
+   "links": {
+    "miquant": "https://example.invalid/mq",
+    "simplize": "https://example.invalid/sz",
+    "vietcap_iq": "https://example.invalid/iq"
+   },
+   "pb": {
+    "as_of": null,
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": -1.7,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": null,
+    "zone_key": "cheap"
+   },
+   "pe": {
+    "as_of": null,
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": null,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": 0.0,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": "TRUNG TÍNH",
+    "zone_key": "neutral"
+   },
+   "price_date": "2026-01-02",
+   "price_now": 10000,
+   "price_src": "vietcap_history",
+   "price_time": null,
+   "quality_val": "1",
+   "tk": "CCC"
+  },
+  {
+   "bvps": 8000.0,
+   "capiq": null,
+   "eps": 1000.0,
+   "eps_src": "implied",
+   "fa_catalyst": null,
+   "fa_rec": "MUA",
+   "fa_tp": 12000,
+   "forward": null,
+   "in_vn100": false,
+   "in_vn30": true,
+   "links": {
+    "miquant": "https://example.invalid/mq",
+    "simplize": "https://example.invalid/sz",
+    "vietcap_iq": "https://example.invalid/iq"
+   },
+   "pb": {
+    "as_of": "2025-12-20",
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": -0.5,
+    "stale": false,
+    "upside_to_fair_pct": 20.0,
+    "zone": "TRUNG TÍNH",
+    "zone_key": "neutral"
+   },
+   "pe": {
+    "as_of": "2021-11-30",
+    "band_cheap1": 10000,
+    "band_cheap2": 8000,
+    "band_fair": 12000,
+    "band_rich1": 14000,
+    "band_rich2": 16000,
+    "max": 20.0,
+    "mean": 12.0,
+    "min": 5.0,
+    "n": 900,
+    "now": 10.0,
+    "reliable": true,
+    "sd": 2.0,
+    "sigma": 2.0,
+    "stale": true,
+    "upside_to_fair_pct": 20.0,
+    "zone": "ĐẮT (>+1σ)",
+    "zone_key": "rich"
+   },
+   "price_date": "2025-12-30",
+   "price_now": 10000,
+   "price_src": "simplize_stale",
+   "price_time": null,
+   "quality_val": "1",
+   "tk": "EEE"
+  }
+ ],
+ "verdict": {
+  "headline": "h",
+  "mode": "deterministic",
+  "reads": [
+   "r1"
+  ],
+  "risks": [
+   "k1"
+  ],
+  "stance": "Tích sản",
+  "updated": "2026-01-02 10:01 ICT"
+ },
+ "zone_counts": {
+  "VN100": {
+   "pb": {
+    "cheap": 1,
+    "neutral": 1,
+    "rich": 1,
+    "stale": 0,
+    "total": 3
+   },
+   "pe": {
+    "cheap": 1,
+    "neutral": 1,
+    "rich": 0,
+    "stale": 0,
+    "total": 2
+   }
+  },
+  "VN30": {
+   "pb": {
+    "cheap": 0,
+    "neutral": 1,
+    "rich": 1,
+    "stale": 0,
+    "total": 2
+   },
+   "pe": {
+    "cheap": 1,
+    "neutral": 0,
+    "rich": 0,
+    "stale": 1,
+    "total": 2
+   }
+  }
+ }
+}
