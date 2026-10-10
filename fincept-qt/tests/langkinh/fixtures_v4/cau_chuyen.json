@@ -1,0 +1,620 @@
+{
+ "_ghi_chu": "FIXTURE kiểm app script — dạng ĐẦU RA bridge (fft_cauchuyen.py) gắn vào ma.<mã>.cau_chuyen; mọi chủ thể, số liệu, nguồn đều GIẢ. Có cài mục thiếu nguồn để kiểm lớp phòng thủ của app.",
+ "nguon": {
+  "tep": "/fixture/fft_cauchuyen.json",
+  "cap_nhat": "2026-09-22",
+  "phien_ban": 1,
+  "pham_vi": "fixture — dữ liệu giả để kiểm",
+  "n_ma": 4,
+  "n_su_kien": 21,
+  "n_vung_gia_gom": 2,
+  "bac_dem": {
+   "FACT-T1": 5,
+   "FACT-T2": 8,
+   "SS-T3": 6,
+   "EST": 0,
+   "UNVERIFIED": 2
+  },
+  "loi": [
+   "STB: ngoài vũ trụ VN30/VN100 của kho — bỏ (fixture)"
+  ]
+ },
+ "ma": {
+  "HPG": {
+   "tieu_de": "[FIXTURE] Chủ thể H gom nhiều đợt qua đăng ký mua và chào mua",
+   "chu_the": [
+    {
+     "ten": "Chủ thể H (fixture)",
+     "vai_tro": "cổ đông lớn",
+     "so_huu": "26,1% (30/06/2026)",
+     "bac": "FACT-T2",
+     "nguon": "fixture/nguon_gia.md:301"
+    },
+    {
+     "ten": "Quỹ K (fixture)",
+     "vai_tro": "bên liên quan",
+     "so_huu": null,
+     "bac": "SS-T3",
+     "nguon": "fixture/nguon_gia.md:302"
+    }
+   ],
+   "dong_co": {
+    "text": "Củng cố quyền chi phối trước chu kỳ đầu tư mới (diễn giải nguồn giả)",
+    "bac": "SS-T3",
+    "nguon": "fixture/nguon_gia.md:303"
+   },
+   "su_kien": [
+    {
+     "id": "HPG-01",
+     "ngay": "2024-02-15",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "dang_ky_mua",
+     "so_luong_cp": 10000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2024-02-20",
+      "den": "2024-03-20"
+     },
+     "mo_ta": "Đăng ký mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 17900,
+      "p25": 17500,
+      "p75": 18300,
+      "lo": 17100,
+      "hi": 18700,
+      "n_phien": 21,
+      "kl": 60000000,
+      "tu": "2024-02-20",
+      "den": "2024-03-20",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2024-02-20→2024-03-20: 21 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:1"
+    },
+    {
+     "id": "HPG-02",
+     "ngay": "2024-04-10",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 8000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2024-03-25",
+      "den": "2024-04-10"
+     },
+     "mo_ta": "Kết quả mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 17200,
+      "p25": 16900,
+      "p75": 17600,
+      "lo": 16500,
+      "hi": 17900,
+      "n_phien": 12,
+      "kl": 45000000,
+      "tu": "2024-03-25",
+      "den": "2024-04-10",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2024-03-25→2024-04-10: 12 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:2"
+    },
+    {
+     "id": "HPG-03",
+     "ngay": "2024-06-28",
+     "ngay_uoc": false,
+     "chu_the": "Công ty (fixture)",
+     "loai": "phat_hanh",
+     "so_luong_cp": null,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Phát hành riêng lẻ (giả)",
+     "bac": "FACT-T1",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:3"
+    },
+    {
+     "id": "HPG-04",
+     "ngay": "2024-09-12",
+     "ngay_uoc": false,
+     "chu_the": "Công ty (fixture)",
+     "loai": "tang_von",
+     "so_luong_cp": null,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Tăng vốn điều lệ (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:4"
+    },
+    {
+     "id": "HPG-05",
+     "ngay": "2024-11-05",
+     "ngay_uoc": false,
+     "chu_the": "Quỹ K (fixture)",
+     "loai": "dau_gia",
+     "so_luong_cp": 3000000,
+     "gia_bao_cao": 16500,
+     "cua_so": null,
+     "mo_ta": "Trúng đấu giá (giả)",
+     "bac": "FACT-T1",
+     "vung_gia": {
+      "gia": 16500,
+      "bac": "FACT-T1",
+      "logic": "giá nguồn nêu (danh nghĩa, chưa điều chỉnh CA)"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:5"
+    },
+    {
+     "id": "HPG-06",
+     "ngay": "2025-01-20",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 5000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2025-01-02",
+      "den": "2025-01-20"
+     },
+     "mo_ta": "Mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 15600,
+      "p25": 15300,
+      "p75": 15900,
+      "lo": 15000,
+      "hi": 16200,
+      "n_phien": 13,
+      "kl": 30000000,
+      "tu": "2025-01-02",
+      "den": "2025-01-20",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2025-01-02→2025-01-20: 13 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:6"
+    },
+    {
+     "id": "HPG-07",
+     "ngay": "2025-03-18",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "cam_co",
+     "so_luong_cp": 20000000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Cầm cố cổ phiếu (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:7"
+    },
+    {
+     "id": "HPG-08",
+     "ngay": "2025-05-22",
+     "ngay_uoc": false,
+     "chu_the": "Quỹ K (fixture)",
+     "loai": "chuyen_nhuong",
+     "so_luong_cp": 1500000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Chuyển nhượng nội bộ (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:8"
+    },
+    {
+     "id": "HPG-09",
+     "ngay": "2025-07-30",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 6000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2025-07-01",
+      "den": "2025-07-30"
+     },
+     "mo_ta": "Mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 14800,
+      "p25": 14500,
+      "p75": 15100,
+      "lo": 14200,
+      "hi": 15400,
+      "n_phien": 21,
+      "kl": 40000000,
+      "tu": "2025-07-01",
+      "den": "2025-07-30",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2025-07-01→2025-07-30: 21 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:9"
+    },
+    {
+     "id": "HPG-10",
+     "ngay": "2025-10-14",
+     "ngay_uoc": false,
+     "chu_the": "Quỹ K (fixture)",
+     "loai": "dang_ky_ban",
+     "so_luong_cp": 4000000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Đăng ký bán (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:10"
+    },
+    {
+     "id": "HPG-11",
+     "ngay": "2026-01-09",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 2500000,
+     "gia_bao_cao": 14100,
+     "cua_so": null,
+     "mo_ta": "Mua thoả thuận (giả)",
+     "bac": "FACT-T1",
+     "vung_gia": {
+      "gia": 14100,
+      "bac": "FACT-T1",
+      "logic": "giá nguồn nêu (danh nghĩa, chưa điều chỉnh CA)"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:11"
+    },
+    {
+     "id": "HPG-12",
+     "ngay": "2026-04-21",
+     "ngay_uoc": true,
+     "chu_the": "Tin đồn (fixture)",
+     "loai": "khac",
+     "so_luong_cp": null,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Tin một nguồn (giả)",
+     "bac": "UNVERIFIED",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:12"
+    },
+    {
+     "id": "HPG-13",
+     "ngay": "2026-06-16",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "thau_tom",
+     "so_luong_cp": 12000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2026-05-18",
+      "den": "2026-06-16"
+     },
+     "mo_ta": "Chào mua công khai (giả)",
+     "bac": "SS-T3",
+     "vung_gia": {
+      "vwap": 13400,
+      "p25": 13100,
+      "p75": 13800,
+      "lo": 12900,
+      "hi": 14100,
+      "n_phien": 21,
+      "kl": 55000000,
+      "tu": "2026-05-18",
+      "den": "2026-06-16",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2026-05-18→2026-06-16: 21 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:13"
+    },
+    {
+     "id": "HPG-14",
+     "ngay": "2026-09-10",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể H (fixture)",
+     "loai": "dang_ky_mua",
+     "so_luong_cp": 7000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2026-09-10",
+      "den": "2026-09-18"
+     },
+     "mo_ta": "Đăng ký mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 10600,
+      "p25": 10400,
+      "p75": 10900,
+      "lo": 10200,
+      "hi": 11000,
+      "n_phien": 7,
+      "kl": 20000000,
+      "tu": "2026-09-10",
+      "den": "2026-09-18",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2026-09-10→2026-09-18: 7 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:14"
+    }
+   ],
+   "diem_gay": {
+    "text": "Sở hữu Chủ thể H giảm dưới 25% trong CBTT kế tiếp",
+    "bac": "EST"
+   },
+   "cau_hoi_mo": [
+    "Nguồn vốn cho đợt chào mua 06/2026?",
+    "Cầm cố 03/2025 đã giải chấp chưa?"
+   ],
+   "vung_gia_gom": {
+    "vwap": 15428,
+    "lo": 10400,
+    "hi": 18300,
+    "nay": 10200,
+    "ngay_nay": "2026-09-21",
+    "lech_nay_pct": -33.89,
+    "su_kien": [
+     "HPG-01",
+     "HPG-02",
+     "HPG-06",
+     "HPG-09",
+     "HPG-13",
+     "HPG-14"
+    ],
+    "bac": "EST",
+    "logic": "VWAP gộp theo KL cửa sổ của 6 sự kiện; lo/hi = min P25 / max P75; không gộp 2 giá báo cáo danh nghĩa (HPG-05, HPG-11) — khác cơ sở CA"
+   },
+   "canh_bao": []
+  },
+  "VHM": {
+   "tieu_de": "[FIXTURE] Chủ thể A thâu tóm rồi mua thêm",
+   "chu_the": [
+    {
+     "ten": "Chủ thể A (fixture)",
+     "vai_tro": "cổ đông chi phối",
+     "so_huu": "18,5% (30/06/2026)",
+     "bac": "FACT-T2",
+     "nguon": "fixture/nguon_gia.md:311"
+    },
+    {
+     "ten": "Quỹ B (fixture)",
+     "vai_tro": "bên liên quan (tin đồn)",
+     "so_huu": null,
+     "bac": "UNVERIFIED",
+     "nguon": "fixture/nguon_gia.md:312"
+    }
+   ],
+   "dong_co": {
+    "text": "Hợp nhất quyền chi phối (diễn giải nguồn giả)",
+    "bac": "SS-T3",
+    "nguon": "fixture/nguon_gia.md:313"
+   },
+   "su_kien": [
+    {
+     "id": "VHM-01",
+     "ngay": "2025-06-20",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể A (fixture)",
+     "loai": "thau_tom",
+     "so_luong_cp": 120000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2025-05-02",
+      "den": "2025-06-20"
+     },
+     "mo_ta": "Thâu tóm (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": {
+      "vwap": 45200,
+      "p25": 43800,
+      "p75": 46900,
+      "lo": 42100,
+      "hi": 48300,
+      "n_phien": 34,
+      "kl": 250000000,
+      "tu": "2025-05-02",
+      "den": "2025-06-20",
+      "bac": "EST",
+      "logic": "VWAP close×KL khớp trong cửa sổ 2025-05-02→2025-06-20: 34 phiên (giá điều chỉnh CA, KHO vci_history) · P25/P75 và min/max của close"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:101"
+    },
+    {
+     "id": "VHM-02",
+     "ngay": "2025-11-14",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể A (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 5000000,
+     "gia_bao_cao": 61500,
+     "cua_so": null,
+     "mo_ta": "Mua thoả thuận (giả)",
+     "bac": "FACT-T1",
+     "vung_gia": {
+      "gia": 61500,
+      "bac": "FACT-T1",
+      "logic": "giá nguồn nêu (danh nghĩa, chưa điều chỉnh CA)"
+     },
+     "vung_gia_ly_do": null,
+     "nguon": "fixture/nguon_gia.md:102"
+    },
+    {
+     "id": "VHM-04",
+     "ngay": "2026-02-02",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể C (fixture)",
+     "loai": "ban",
+     "so_luong_cp": 2500000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Bán (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:104"
+    },
+    {
+     "id": "VHM-05",
+     "ngay": "2026-03-01",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể A (fixture)",
+     "loai": "mua",
+     "so_luong_cp": 1000000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "THIẾU NGUỒN — app phải bỏ",
+     "bac": "FACT-T2",
+     "vung_gia": null,
+     "vung_gia_ly_do": null
+    },
+    {
+     "id": "VHM-03",
+     "ngay": "2026-08-05",
+     "ngay_uoc": true,
+     "chu_the": "Quỹ B (fixture)",
+     "loai": "khac",
+     "so_luong_cp": null,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Tin tăng sở hữu một nguồn (giả)",
+     "bac": "UNVERIFIED",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:103"
+    }
+   ],
+   "diem_gay": {
+    "text": "Tỷ lệ Chủ thể A giảm dưới 15% trong CBTT kế tiếp",
+    "bac": "EST"
+   },
+   "cau_hoi_mo": [
+    "Nguồn vốn thâu tóm?"
+   ],
+   "vung_gia_gom": {
+    "vwap": 45200,
+    "lo": 43800,
+    "hi": 46900,
+    "nay": 77000,
+    "ngay_nay": "2026-09-21",
+    "lech_nay_pct": 70.35,
+    "su_kien": [
+     "VHM-01"
+    ],
+    "bac": "EST",
+    "logic": "VWAP gộp theo KL cửa sổ của 1 sự kiện (VHM-01); lo/hi = min P25 / max P75; không gộp 1 giá báo cáo danh nghĩa (VHM-02) — khác cơ sở CA"
+   },
+   "canh_bao": []
+  },
+  "MBB": {
+   "tieu_de": "[FIXTURE] Chủ thể M đăng ký mua — cửa sổ quá ngắn để ước vùng giá",
+   "chu_the": [
+    {
+     "ten": "Chủ thể M (fixture)",
+     "vai_tro": "thành viên HĐQT",
+     "so_huu": null,
+     "bac": "FACT-T2",
+     "nguon": "fixture/nguon_gia.md:321"
+    }
+   ],
+   "dong_co": null,
+   "su_kien": [
+    {
+     "id": "MBB-01",
+     "ngay": "2026-09-15",
+     "ngay_uoc": false,
+     "chu_the": "Chủ thể M (fixture)",
+     "loai": "dang_ky_mua",
+     "so_luong_cp": 20000000,
+     "gia_bao_cao": null,
+     "cua_so": {
+      "tu": "2026-09-15",
+      "den": "2026-09-17"
+     },
+     "mo_ta": "Đăng ký mua (giả)",
+     "bac": "FACT-T2",
+     "vung_gia": null,
+     "vung_gia_ly_do": "cửa sổ 2026-09-15→2026-09-17 có 2 phiên trong kho (cần ≥3 phiên, KL > 0) — không ước vùng giá",
+     "nguon": "fixture/nguon_gia.md:201"
+    }
+   ],
+   "diem_gay": null,
+   "cau_hoi_mo": [],
+   "vung_gia_gom": null,
+   "canh_bao": []
+  },
+  "PLX": {
+   "tieu_de": "[FIXTURE] Cầm cố và quyết định pháp lý",
+   "chu_the": [
+    {
+     "ten": "Cổ đông P (fixture)",
+     "vai_tro": "cổ đông nhà nước",
+     "so_huu": "75,9% (31/12/2025)",
+     "bac": "FACT-T1",
+     "nguon": "fixture/nguon_gia.md:331"
+    },
+    {
+     "ten": "Chủ thể thiếu nguồn (fixture)",
+     "vai_tro": "?",
+     "bac": "SS-T3"
+    }
+   ],
+   "dong_co": {
+    "text": "Thoái vốn theo lộ trình (diễn giải nguồn giả)",
+    "bac": "SS-T3",
+    "nguon": "fixture/nguon_gia.md:333"
+   },
+   "su_kien": [
+    {
+     "id": "PLX-01",
+     "ngay": "2025-12-01",
+     "ngay_uoc": false,
+     "chu_the": "Cổ đông P (fixture)",
+     "loai": "cam_co",
+     "so_luong_cp": 30000000,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Cầm cố (giả)",
+     "bac": "SS-T3",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:201"
+    },
+    {
+     "id": "PLX-02",
+     "ngay": "2026-04-10",
+     "ngay_uoc": false,
+     "chu_the": "Công ty (fixture)",
+     "loai": "phap_ly",
+     "so_luong_cp": null,
+     "gia_bao_cao": null,
+     "cua_so": null,
+     "mo_ta": "Quyết định pháp lý (giả)",
+     "bac": "FACT-T1",
+     "vung_gia": null,
+     "vung_gia_ly_do": "[CẦN DATA] vùng giá — nguồn không nêu cửa sổ/giá",
+     "nguon": "fixture/nguon_gia.md:202"
+    }
+   ],
+   "diem_gay": null,
+   "cau_hoi_mo": [],
+   "vung_gia_gom": null,
+   "canh_bao": []
+  }
+ }
+}
