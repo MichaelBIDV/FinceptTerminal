@@ -37,8 +37,11 @@ class EconomicsService : public QObject, public fincept::datahub::Producer {
     /// @param command    first CLI argument
     /// @param args       additional arguments
     /// @param request_id unique id to correlate response
+    /// @param force      bypass the cached copy and re-run the script. For sources whose
+    ///                   value IS freshness (a file on disk rebuilt every few minutes), a
+    ///                   cache hit is a wrong answer, not a fast one.
     void execute(const QString& source_id, const QString& script, const QString& command, const QStringList& args,
-                 const QString& request_id);
+                 const QString& request_id, bool force = false);
 
     /// Invalidate cache for a given request key (force re-fetch).
     void invalidate(const QString& request_id);

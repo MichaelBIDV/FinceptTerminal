@@ -59,6 +59,7 @@ static const struct {
     const char* label;
     const char* color;
 } kSources[] = {
+    {"fincept", "★ Fincept Macro (VN · US · CN · EU)", "#f59e0b"},
     {"worldbank", "World Bank", "#2563EB"},
     {"imf", "IMF", "#1B5E20"},
     {"fred", "FRED", "#B22222"},
@@ -90,7 +91,6 @@ static const struct {
     {"wto", "WTO", "#E91E63"},
     {"unesco", "UNESCO", "#00ACC1"},
     {"bea", "BEA", "#E65100"},
-    {"fincept", "Fincept Macro", "#d97706"},
 };
 
 // ── Panel factory ─────────────────────────────────────────────────────────────
@@ -353,9 +353,10 @@ QVariantMap EconomicsScreen::save_state() const {
 }
 
 void EconomicsScreen::restore_state(const QVariantMap& state) {
-    const QString id = state.value("source_id").toString();
-    if (!id.isEmpty())
-        switch_to(id);
+    QString id = state.value("source_id").toString();
+    if (id.isEmpty() || id == "census" || id == "worldbank")
+        id = "fincept";
+    switch_to(id);
     for (auto& entry : sources_) {
         const QString key = entry.id + "_panel";
         if (entry.panel && state.contains(key))
